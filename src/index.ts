@@ -22,13 +22,24 @@ import {
   handleReconnectAgent,
 } from "./tools/agents.js";
 import { listAlertsSchema, handleListAlerts } from "./tools/alerts.js";
-import { hashReputationSchema, handleHashReputation } from "./tools/hash.js";
+import { hashLookupSchema, handleHashLookup } from "./tools/hash.js";
 import {
   dvQuerySchema,
   dvGetEventsSchema,
   handleDVQuery,
   handleDVGetEvents,
 } from "./tools/dv.js";
+
+// Parent PID watchdog: auto-exit when parent (Claude Code) dies to prevent zombie processes
+const parentPid = process.ppid;
+const WATCHDOG_INTERVAL_MS = 5000;
+setInterval(() => {
+  try {
+    process.kill(parentPid, 0); // signal 0 = existence check, no actual signal sent
+  } catch {
+    process.exit(0);
+  }
+}, WATCHDOG_INTERVAL_MS);
 
 async function main() {
   // Validate config before starting
@@ -105,12 +116,12 @@ async function main() {
     handleListAlerts
   );
 
-  // Register hash reputation tool
+  // Register hash lookup tool (Deep Visibility)
   server.tool(
     "s1_hash_reputation",
-    "Lookup reputation for a SHA1 or SHA256 hash",
-    hashReputationSchema.shape,
-    handleHashReputation
+    "Hunt a SHA1/SHA256 hash across the fleet via Deep Visibility. Returns endpoints, processes, and file paths where the hash was seen in the last 14 days.",
+    hashLookupSchema.shape,
+    handleHashLookup
   );
 
   // Register Deep Visibility tools

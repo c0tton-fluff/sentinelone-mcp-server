@@ -64,19 +64,6 @@ export interface Agent {
   }>;
 }
 
-// Hash reputation types
-export interface HashReputation {
-  hash: string;
-  classification: string;
-  classificationSource: string;
-  data: Array<{
-    rank: number;
-    name: string;
-    classification: string;
-    createdAt?: string;
-  }>;
-}
-
 // Deep Visibility types
 export interface DVQueryResponse {
   queryId: string;
