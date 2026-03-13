@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -32,6 +33,9 @@ var listAgentsTool = mcp.NewTool("s1_list_agents",
 	mcp.WithArray("networkStatuses",
 		mcp.Description("Filter: connected, disconnected"),
 		mcp.Items(map[string]any{"type": "string"}),
+	),
+	mcp.WithString("countBy",
+		mcp.Description("Fetch all agents and group counts by field: user, os, site, group"),
 	),
 )
 
@@ -80,6 +84,7 @@ func summarizeAgent(a map[string]any) string {
 }
 
 func handleListAgents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	countBy := req.GetString("countBy", "")
 	limit := int(req.GetFloat("limit", 50))
 	if limit < 1 || limit > 200 {
 		limit = 50
@@ -109,17 +114,29 @@ func handleListAgents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 		q.Set("isInfected", strconv.FormatBool(v))
 	}
 
+	// When countBy is set, fetch all agents (no limit)
+	fetchAll := countBy != ""
+
+	totalItems := 0
 	var allAgents []map[string]any
 	for {
 		result, err := client.ListAgents(ctx, q)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
 		}
+		if result.Pagination != nil && totalItems == 0 {
+			totalItems = result.Pagination.TotalItems
+		}
 		allAgents = append(allAgents, result.Data...)
-		if len(allAgents) >= limit || result.Pagination == nil || result.Pagination.NextCursor == "" {
+		if (!fetchAll && len(allAgents) >= limit) || result.Pagination == nil || result.Pagination.NextCursor == "" {
 			break
 		}
 		q.Set("cursor", result.Pagination.NextCursor)
+	}
+
+	// countBy mode: group all agents by a field and return counts
+	if fetchAll {
+		return handleCountBy(countBy, allAgents, totalItems)
 	}
 
 	if len(allAgents) > limit {
@@ -127,7 +144,7 @@ func handleListAgents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 	}
 
 	if len(allAgents) == 0 {
-		return mcp.NewToolResultText("No agents found matching criteria."), nil
+		return mcp.NewToolResultText(fmt.Sprintf("%d agents. None matched filters.", totalItems)), nil
 	}
 
 	lines := make([]string, len(allAgents))
@@ -135,7 +152,54 @@ func handleListAgents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 		lines[i] = summarizeAgent(a)
 	}
 
-	text := fmt.Sprintf("Found %d agent(s):\n\n%s", len(allAgents), strings.Join(lines, "\n\n"))
+	text := fmt.Sprintf("%d agents. Showing %d:\n\n%s", totalItems, len(allAgents), strings.Join(lines, "\n\n"))
+	return mcp.NewToolResultText(text), nil
+}
+
+// countByFields maps friendly names to S1 agent JSON fields.
+var countByFields = map[string]string{
+	"user":  "lastLoggedInUserName",
+	"os":    "osName",
+	"site":  "siteName",
+	"group": "groupName",
+}
+
+func handleCountBy(field string, agents []map[string]any, totalItems int) (*mcp.CallToolResult, error) {
+	apiField, ok := countByFields[field]
+	if !ok {
+		valid := make([]string, 0, len(countByFields))
+		for k := range countByFields {
+			valid = append(valid, k)
+		}
+		sort.Strings(valid)
+		return mcp.NewToolResultError(fmt.Sprintf("Invalid countBy field %q. Valid: %s", field, strings.Join(valid, ", "))), nil
+	}
+
+	counts := map[string]int{}
+	for _, a := range agents {
+		val := fallback(getStr(a, apiField), "(empty)")
+		counts[val]++
+	}
+
+	// Sort by count descending
+	type kv struct {
+		Key   string
+		Count int
+	}
+	sorted := make([]kv, 0, len(counts))
+	for k, v := range counts {
+		sorted = append(sorted, kv{k, v})
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Count > sorted[j].Count
+	})
+
+	lines := make([]string, len(sorted))
+	for i, s := range sorted {
+		lines[i] = fmt.Sprintf("  %s: %d", s.Key, s.Count)
+	}
+
+	text := fmt.Sprintf("%d agents, %d unique %s values:\n\n%s", totalItems, len(counts), field, strings.Join(lines, "\n"))
 	return mcp.NewToolResultText(text), nil
 }
 
