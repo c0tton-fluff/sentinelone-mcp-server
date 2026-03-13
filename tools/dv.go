@@ -221,12 +221,13 @@ done:
 			"queryId": queryID,
 			"status":  status.Status,
 			"message": "Query completed. Use s1_dv_get_events to retrieve results.",
+			"warning": "Do NOT run another s1_dv_query in parallel. Combine related searches into one query using OR chains to avoid 429 rate-limit errors.",
 		}
 		b, _ := json.MarshalIndent(result, "", "  ")
 		return mcp.NewToolResultText(string(b)), nil
 	default:
 		return mcp.NewToolResultText(
-			fmt.Sprintf("Query still running after 30 seconds (status: %s). Use s1_dv_get_events with queryId: %s to retrieve results later.",
+			fmt.Sprintf("Query still running after 30 seconds (status: %s). Use s1_dv_get_events with queryId: %s to retrieve results later.\n\nWARNING: Do NOT run another s1_dv_query in parallel. Combine related searches into one query using OR chains to avoid 429 rate-limit errors.",
 				fallback(status.Status, "unknown"), queryID),
 		), nil
 	}
