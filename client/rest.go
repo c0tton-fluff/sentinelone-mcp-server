@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,46 +35,72 @@ type DVStatus struct {
 	ResponseError  string `json:"responseError"`
 }
 
+const maxRetries = 3
+
 func doRequest(method, endpoint string, body any) ([]byte, error) {
 	cfg := config.Get()
 	u := cfg.APIBase + "/web/api/v2.1" + endpoint
 
-	var reqBody io.Reader
+	var bodyBytes []byte
 	if body != nil {
-		b, err := json.Marshal(body)
+		var err error
+		bodyBytes, err = json.Marshal(body)
 		if err != nil {
 			return nil, fmt.Errorf("marshal request body: %w", err)
 		}
-		reqBody = bytes.NewReader(b)
 	}
 
-	req, err := http.NewRequest(method, u, reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
+	backoff := 2 * time.Second
 
-	req.Header.Set("Authorization", "ApiToken "+cfg.APIKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("%s", sanitize(err.Error()))
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	if resp.StatusCode >= 400 {
-		if detail := extractAPIError(data); detail != "" {
-			return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, sanitize(detail))
+	for attempt := range maxRetries + 1 {
+		var reqBody io.Reader
+		if bodyBytes != nil {
+			reqBody = bytes.NewReader(bodyBytes)
 		}
-		return nil, fmt.Errorf("HTTP %d: %s - %s", resp.StatusCode, resp.Status, sanitize(string(data)))
+
+		req, err := http.NewRequest(method, u, reqBody)
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+
+		req.Header.Set("Authorization", "ApiToken "+cfg.APIKey)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("%s", sanitize(err.Error()))
+		}
+
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read response: %w", err)
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests && attempt < maxRetries {
+			wait := backoff
+			if ra := resp.Header.Get("Retry-After"); ra != "" {
+				if secs, err := strconv.Atoi(ra); err == nil && secs > 0 {
+					wait = time.Duration(secs) * time.Second
+				}
+			}
+			time.Sleep(wait)
+			backoff *= 2
+			continue
+		}
+
+		if resp.StatusCode >= 400 {
+			if detail := extractAPIError(data); detail != "" {
+				return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, sanitize(detail))
+			}
+			return nil, fmt.Errorf("HTTP %d: %s - %s", resp.StatusCode, resp.Status, sanitize(string(data)))
+		}
+
+		return data, nil
 	}
 
-	return data, nil
+	// Unreachable — the final attempt always returns above — but keeps the compiler happy.
+	return nil, fmt.Errorf("request failed after %d retries", maxRetries)
 }
 
 // extractAPIError pulls the human-readable detail from S1's error JSON.

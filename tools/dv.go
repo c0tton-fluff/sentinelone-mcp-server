@@ -32,6 +32,17 @@ Examples:
   SrcProcImagePath Contains "/Downloads/" AND EventType = "Process Creation"
   DnsRequest Contains "evil.com" OR DstIP = "1.2.3.4"
 
+Query strategy:
+  - Combine related conditions into ONE query using OR instead of running multiple
+    parallel queries. The S1 API rate-limits query creation aggressively.
+    Bad:  3 separate queries for /tmp/, /Downloads/, /Desktop/
+    Good: SrcProcImagePath Contains "/tmp/" OR SrcProcImagePath Contains "/Downloads/" OR SrcProcImagePath Contains "/Desktop/"
+  - Use AND to narrow broad queries (e.g., add EventType = "Process Creation")
+  - Use In/NotIn for matching against a list of values:
+    ProcessName In ("cmd.exe","powershell.exe","pwsh.exe")
+  - For exclusions, prefer NotIn over multiple != conditions:
+    ProcessName NotIn ("chrome.exe","bash","node","svchost.exe")
+
 Limitations:
   - Do NOT use ObjectType as a field (not supported in DV queries)
   - Avoid trailing backslashes in values (e.g., "\\Desktop\\" breaks the parser).
