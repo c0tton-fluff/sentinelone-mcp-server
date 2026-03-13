@@ -21,7 +21,8 @@ and combine related searches into a single query using OR chains.
 Query syntax:
   <Field> <Operator> "<Value>" [AND|OR <Field> <Operator> "<Value>" ...]
 
-Operators: Contains, ContainsCIS (case-insensitive), =, !=, In, NotIn, StartsWith, EndsWith, RegExp
+Operators: Contains, Contains Anycase (case-insensitive), ContainsCIS (alias),
+            =, !=, In, In Anycase, In Contains Anycase, NotIn, StartsWith, EndsWith, RegExp
 
 Common fields:
   Process:  ProcessName, SrcProcImagePath, TgtProcImagePath, SrcProcCmdLine, SrcProcUser
@@ -50,9 +51,9 @@ Query strategy:
 Limitations:
   - Do NOT use ObjectType as a field (not supported in DV queries)
   - Avoid trailing backslashes in values (e.g., "\\Desktop\\" breaks the parser).
-    Use "\\Desktop" or ContainsCIS instead
+    Use "\\Desktop" or Contains Anycase instead
   - Use parentheses to group when mixing AND/OR: A AND (B OR C OR D)
-  - Deeply nested parentheses may fail — keep grouping to one level
+  - Nested parentheses are supported: A AND (B OR (C AND D))
   - Max query window is 14 days`),
 	mcp.WithString("query",
 		mcp.Required(),
