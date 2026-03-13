@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/c0tton-fluff/sentinelone-mcp-server/client"
@@ -20,7 +19,7 @@ var listThreatsTool = mcp.NewTool("s1_list_threats",
 		mcp.Description("Search by threat name (partial match)"),
 	),
 	mcp.WithNumber("limit",
-		mcp.Description("Max results (default 10, max 50)"),
+		mcp.Description("Max results (default 50, max 200)"),
 	),
 	mcp.WithArray("mitigationStatuses",
 		mcp.Description("Filter: not_mitigated, mitigated, marked_as_benign"),
@@ -72,13 +71,13 @@ func summarizeThreat(t map[string]any) string {
 }
 
 func handleListThreats(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	limit := int(req.GetFloat("limit", 10))
-	if limit < 1 || limit > 50 {
-		limit = 10
+	limit := int(req.GetFloat("limit", 50))
+	if limit < 1 || limit > 200 {
+		limit = 50
 	}
 
 	q := url.Values{}
-	q.Set("limit", strconv.Itoa(limit))
+	q.Set("limit", "50")
 
 	if v := req.GetString("computerName", ""); v != "" {
 		q.Set("computerName__contains", v)
@@ -93,21 +92,33 @@ func handleListThreats(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallT
 		q.Set("classifications", strings.Join(v, ","))
 	}
 
-	result, err := client.ListThreats(q)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+	var allThreats []map[string]any
+	for {
+		result, err := client.ListThreats(q)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+		}
+		allThreats = append(allThreats, result.Data...)
+		if len(allThreats) >= limit || result.Pagination == nil || result.Pagination.NextCursor == "" {
+			break
+		}
+		q.Set("cursor", result.Pagination.NextCursor)
 	}
 
-	if len(result.Data) == 0 {
+	if len(allThreats) > limit {
+		allThreats = allThreats[:limit]
+	}
+
+	if len(allThreats) == 0 {
 		return mcp.NewToolResultText("No threats found matching criteria."), nil
 	}
 
-	lines := make([]string, len(result.Data))
-	for i, t := range result.Data {
+	lines := make([]string, len(allThreats))
+	for i, t := range allThreats {
 		lines[i] = summarizeThreat(t)
 	}
 
-	text := fmt.Sprintf("Found %d threat(s):\n\n%s", len(result.Data), strings.Join(lines, "\n\n"))
+	text := fmt.Sprintf("Found %d threat(s):\n\n%s", len(allThreats), strings.Join(lines, "\n\n"))
 	return mcp.NewToolResultText(text), nil
 }
 

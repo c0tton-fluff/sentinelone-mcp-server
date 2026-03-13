@@ -12,10 +12,7 @@ import (
 var listAlertsTool = mcp.NewTool("s1_list_alerts",
 	mcp.WithDescription("List unified alerts via GraphQL. Use storylineId to correlate with threats."),
 	mcp.WithNumber("limit",
-		mcp.Description("Max results (default 20, max 50)"),
-	),
-	mcp.WithString("cursor",
-		mcp.Description("Pagination cursor (endCursor from previous response)"),
+		mcp.Description("Max results (default 50, max 200)"),
 	),
 	mcp.WithString("severity",
 		mcp.Description("Filter by severity: LOW, MEDIUM, HIGH, CRITICAL (case-insensitive)"),
@@ -55,37 +52,47 @@ func summarizeAlert(a map[string]any) string {
 }
 
 func handleListAlerts(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	limit := int(req.GetFloat("limit", 20))
-	if limit < 1 || limit > 50 {
-		limit = 20
+	limit := int(req.GetFloat("limit", 50))
+	if limit < 1 || limit > 200 {
+		limit = 50
 	}
 
-	result, err := client.QueryAlerts(
-		limit,
-		req.GetString("cursor", ""),
-		req.GetString("severity", ""),
-		req.GetString("analystVerdict", ""),
-		req.GetString("incidentStatus", ""),
-		req.GetString("storylineId", ""),
-		req.GetStringSlice("siteIds", nil),
-	)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Error listing alerts: %v", err)), nil
+	const pageSize = 50
+	var allAlerts []map[string]any
+	cursor := ""
+	for {
+		result, err := client.QueryAlerts(
+			pageSize,
+			cursor,
+			req.GetString("severity", ""),
+			req.GetString("analystVerdict", ""),
+			req.GetString("incidentStatus", ""),
+			req.GetString("storylineId", ""),
+			req.GetStringSlice("siteIds", nil),
+		)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Error listing alerts: %v", err)), nil
+		}
+		allAlerts = append(allAlerts, result.Alerts...)
+		if !result.PageInfo.HasNextPage || len(allAlerts) >= limit {
+			break
+		}
+		cursor = result.PageInfo.EndCursor
 	}
 
-	if len(result.Alerts) == 0 {
+	if len(allAlerts) > limit {
+		allAlerts = allAlerts[:limit]
+	}
+
+	if len(allAlerts) == 0 {
 		return mcp.NewToolResultText("No alerts found matching criteria."), nil
 	}
 
-	lines := make([]string, len(result.Alerts))
-	for i, a := range result.Alerts {
+	lines := make([]string, len(allAlerts))
+	for i, a := range allAlerts {
 		lines[i] = summarizeAlert(a)
 	}
 
-	text := fmt.Sprintf("Found %d alert(s):\n\n%s", len(result.Alerts), strings.Join(lines, "\n\n"))
-	if result.PageInfo.HasNextPage {
-		text += fmt.Sprintf("\n\n[More results available - use cursor: %s]", result.PageInfo.EndCursor)
-	}
-
+	text := fmt.Sprintf("Found %d alert(s):\n\n%s", len(allAlerts), strings.Join(lines, "\n\n"))
 	return mcp.NewToolResultText(text), nil
 }

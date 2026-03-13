@@ -99,10 +99,7 @@ shares rate limits across all endpoints per token.`),
 		mcp.Description("Query ID returned from s1_dv_query"),
 	),
 	mcp.WithNumber("limit",
-		mcp.Description("Max results (default 50, max 100)"),
-	),
-	mcp.WithString("cursor",
-		mcp.Description("Pagination cursor"),
+		mcp.Description("Max results (default 100, max 100)"),
 	),
 )
 
@@ -330,11 +327,10 @@ func handleDVGetEvents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallT
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	limit := int(req.GetFloat("limit", 50))
+	limit := int(req.GetFloat("limit", 100))
 	if limit < 1 || limit > 100 {
-		limit = 50
+		limit = 100
 	}
-	cursor := req.GetString("cursor", "")
 
 	// Wait for query to finish if still running.
 	for i := 0; i < 30; i++ {
@@ -366,7 +362,7 @@ ready:
 	// Fetch events, retrying on 409 (S1 race: status says FINISHED but events not yet available).
 	var result *client.PaginatedResponse
 	for i := 0; i < 5; i++ {
-		result, err = client.GetDVEvents(queryID, limit, cursor)
+		result, err = client.GetDVEvents(queryID, limit, "")
 		if err == nil {
 			break
 		}
@@ -393,9 +389,5 @@ ready:
 	}
 
 	text := fmt.Sprintf("Found %d event(s):\n\n%s", len(result.Data), strings.Join(lines, "\n"))
-	if result.Pagination != nil && result.Pagination.NextCursor != "" {
-		text += fmt.Sprintf("\n\n[More results available - use cursor: %s]", result.Pagination.NextCursor)
-	}
-
 	return mcp.NewToolResultText(text), nil
 }
