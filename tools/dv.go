@@ -14,29 +14,54 @@ import (
 var dvQueryTool = mcp.NewTool("s1_dv_query",
 	mcp.WithDescription(`Run a Deep Visibility query. Returns queryId when complete.
 
+IMPORTANT: Do NOT run multiple s1_dv_query calls in parallel. The S1 API
+aggressively rate-limits query creation per token. Run DV queries sequentially
+and combine related searches into a single query using OR chains.
+
 Query syntax:
   <Field> <Operator> "<Value>" [AND|OR <Field> <Operator> "<Value>" ...]
 
-Operators: Contains, ContainsCIS (case-insensitive), =, !=, In, NotIn, StartsWith, EndsWith, RegExp
+Operators: Contains, Contains Anycase (case-insensitive), ContainsCIS (alias),
+            =, !=, In, In Anycase, In Contains Anycase, NotIn, StartsWith, EndsWith, RegExp
 
 Common fields:
-  Process:  ProcessName, SrcProcImagePath, TgtProcImagePath, SrcProcCmdLine, SrcProcUser
+  Source process (the process performing the action):
+    SrcProcName, SrcProcImagePath, SrcProcCmdLine, SrcProcUser
+  Target process (the process being created/acted upon):
+    TgtProcName, TgtProcImagePath, TgtProcCmdLine
   File:     FilePath, FileFullName, FileSHA256, FileMD5
-  Network:  SrcIP, DstIP, DstPort, DnsRequest, Url
+  Network:  SrcIP, DstIP, DstPort, DnsRequest, DnsResponse, Url
   Event:    EventType (values: "Process Creation", "File Creation", "File Modification",
             "File Deletion", "File Rename", "DNS Resolved", "IP Connect",
             "Behavioral Indicators", "Registry Key Creation", "Registry Value Modified")
 
+Additional syntax:
+  - "not" prefix negates a condition: not TgtProcName In Anycase ("wermgr.exe")
+  - "Anycase" suffix for case-insensitive: Contains Anycase, In Anycase
+  - Operators are case-insensitive: and/And/AND all work
+
 Examples:
-  ProcessName Contains "python"
-  SrcProcImagePath Contains "/Downloads/" AND EventType = "Process Creation"
+  TgtProcImagePath ContainsCIS "/usr/bin/security" AND EventType = "Process Creation"
+  SrcProcName In Anycase ("w3wp.exe") AND TgtProcCmdLine Contains Anycase "cmd"
   DnsRequest Contains "evil.com" OR DstIP = "1.2.3.4"
+
+Query strategy:
+  - Combine related conditions into ONE query using OR instead of running multiple
+    parallel queries. The S1 API rate-limits query creation aggressively.
+    Bad:  3 separate queries for /tmp/, /Downloads/, /Desktop/
+    Good: SrcProcImagePath Contains "/tmp/" OR SrcProcImagePath Contains "/Downloads/" OR SrcProcImagePath Contains "/Desktop/"
+  - Use AND to narrow broad queries (e.g., add EventType = "Process Creation")
+  - Use In/NotIn for matching against a list of values:
+    TgtProcName In Anycase ("cmd.exe","powershell.exe","pwsh.exe")
+  - For exclusions, prefer NotIn over multiple != conditions:
+    TgtProcName NotIn ("chrome.exe","bash","node","svchost.exe")
 
 Limitations:
   - Do NOT use ObjectType as a field (not supported in DV queries)
   - Avoid trailing backslashes in values (e.g., "\\Desktop\\" breaks the parser).
-    Use "\\Desktop" or ContainsCIS instead
-  - Complex nested parentheses may fail — prefer flat AND/OR chains
+    Use "\\Desktop" or Contains Anycase instead
+  - Use parentheses to group when mixing AND/OR: A AND (B OR C OR D)
+  - Nested parentheses are supported: A AND (B OR (C AND D))
   - Max query window is 14 days`),
 	mcp.WithString("query",
 		mcp.Required(),
@@ -65,7 +90,10 @@ Limitations:
 )
 
 var dvGetEventsTool = mcp.NewTool("s1_dv_get_events",
-	mcp.WithDescription("Get events from a completed Deep Visibility query"),
+	mcp.WithDescription(`Get events from a completed Deep Visibility query.
+
+IMPORTANT: Run s1_dv_get_events calls sequentially, not in parallel. The S1 API
+shares rate limits across all endpoints per token.`),
 	mcp.WithString("queryId",
 		mcp.Required(),
 		mcp.Description("Query ID returned from s1_dv_query"),
@@ -116,21 +144,105 @@ func summarizeEvent(e map[string]any) string {
 // invalidDVFields lists field names that are commonly confused with valid DV fields.
 var invalidDVFields = []string{"ObjectType", "ObjectName"}
 
-// validateDVQuery checks for common query mistakes before sending to the API.
-func validateDVQuery(query string) error {
-	for _, field := range invalidDVFields {
-		// Check for "FieldName <operator>" pattern (field used as a query field)
-		if strings.Contains(query, field+" ") {
-			return fmt.Errorf("%q is not a valid Deep Visibility field. Use EventType to filter by event type, or SrcProcImagePath / ProcessName for process filtering", field)
+// fixBackslashesInDVValues strips backslashes from quoted string values in a
+// DV query. The S1 DV query parser has no backslash escape mechanism in string
+// literals, so bare backslashes cause parse errors — especially trailing \"
+// which swallows the closing quote. Stripping backslashes makes Contains matches
+// slightly broader (e.g., "\Temp" → "Temp") but never narrower.
+//
+// Backslashes inside RegExp values are preserved (regex syntax needs them).
+func fixBackslashesInDVValues(query string) (string, bool) {
+	var b strings.Builder
+	b.Grow(len(query))
+	modified := false
+	i := 0
+	isRegExp := false
+
+	for i < len(query) {
+		// Detect RegExp operator immediately before a quoted value.
+		if i+7 <= len(query) && query[i:i+7] == "RegExp " {
+			b.WriteString("RegExp ")
+			i += 7
+			isRegExp = true
+			continue
+		}
+
+		if query[i] == '"' {
+			b.WriteByte('"')
+			i++
+			// Inside a quoted value — strip backslashes unless RegExp.
+			for i < len(query) && query[i] != '"' {
+				if query[i] == '\\' && !isRegExp {
+					modified = true
+					i++
+					continue
+				}
+				b.WriteByte(query[i])
+				i++
+			}
+			if i < len(query) {
+				b.WriteByte('"')
+				i++
+			}
+			isRegExp = false
+		} else {
+			b.WriteByte(query[i])
+			i++
 		}
 	}
 
-	// Check for trailing backslash before closing quote (breaks S1 parser)
-	if strings.Contains(query, `\"`) {
-		return fmt.Errorf("query contains backslash-quote sequence which will break the S1 parser. Avoid trailing backslashes in quoted values")
+	return b.String(), modified
+}
+
+// validateDVQuery checks for common query mistakes and auto-fixes what it can.
+// Returns the (possibly sanitized) query, a warning (empty if none), and an
+// error for unfixable issues.
+func validateDVQuery(query string) (string, string, error) {
+	for _, field := range invalidDVFields {
+		// Check for "FieldName <operator>" pattern (field used as a query field)
+		if strings.Contains(query, field+" ") {
+			return "", "", fmt.Errorf("%q is not a valid Deep Visibility field. Use EventType to filter by event type, or SrcProcImagePath / ProcessName for process filtering", field)
+		}
 	}
 
-	return nil
+	// Strip backslashes from quoted values (S1 DV parser doesn't support them).
+	var warning string
+	query, changed := fixBackslashesInDVValues(query)
+	if changed {
+		warning = "Backslashes were stripped from query values (S1 DV parser does not support them). Use forward slashes or omit path separators for reliable matching."
+	}
+
+	// Check for mixed AND/OR at the top level (outside parentheses).
+	// S1 supports parenthesized grouping like "A AND (B OR C)", but cannot
+	// handle ambiguous "A AND B OR C" without grouping.
+	upper := strings.ToUpper(query)
+	depth := 0
+	hasTopAND := false
+	hasTopOR := false
+	for i := 0; i < len(upper); i++ {
+		switch upper[i] {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		default:
+			if depth == 0 {
+				if i+5 <= len(upper) && upper[i:i+5] == " AND " {
+					hasTopAND = true
+				}
+				if i+4 <= len(upper) && upper[i:i+4] == " OR " {
+					hasTopOR = true
+				}
+			}
+		}
+	}
+	if hasTopAND && hasTopOR {
+		return "", "", fmt.Errorf("query mixes AND and OR at the top level. Group conditions with parentheses, e.g. A AND (B OR C), or split into separate queries")
+	}
+
+	return query, warning, nil
 }
 
 func handleDVQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -147,7 +259,9 @@ func handleDVQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolR
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	if err := validateDVQuery(query); err != nil {
+	var dvWarning string
+	query, dvWarning, err = validateDVQuery(query)
+	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Invalid query: %v", err)), nil
 	}
 
@@ -162,7 +276,7 @@ func handleDVQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolR
 		), nil
 	}
 
-	// Poll for completion
+	// Poll for completion — only break on known terminal states.
 	var status *client.DVStatus
 	for i := 0; i < 30; i++ {
 		time.Sleep(1 * time.Second)
@@ -172,30 +286,42 @@ func handleDVQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolR
 				fmt.Sprintf("Error running Deep Visibility query: %v", err),
 			), nil
 		}
-		if status.Status != "RUNNING" {
-			break
+		switch status.Status {
+		case "FINISHED", "FAILED", "CANCELED":
+			goto done
 		}
 	}
+done:
 
-	if status.Status == "FAILED" {
+	switch status.Status {
+	case "FAILED":
 		return mcp.NewToolResultError(
 			fmt.Sprintf("Deep Visibility query failed: %s", fallback(status.ResponseError, "Unknown error")),
 		), nil
-	}
-
-	if status.Status == "RUNNING" {
-		return mcp.NewToolResultText(
-			fmt.Sprintf("Query still running after 30 seconds. Use s1_dv_get_events with queryId: %s to retrieve results later.", queryID),
+	case "CANCELED":
+		return mcp.NewToolResultError(
+			fmt.Sprintf("Deep Visibility query was canceled"),
 		), nil
+	case "FINISHED":
+		result := map[string]string{
+			"queryId": queryID,
+			"status":  status.Status,
+			"message": "Query completed. Use s1_dv_get_events to retrieve results.",
+			"warning": "Do NOT run another s1_dv_query in parallel. Combine related searches into one query using OR chains to avoid 429 rate-limit errors.",
+		}
+		if dvWarning != "" {
+			result["queryFixup"] = dvWarning
+		}
+		b, _ := json.MarshalIndent(result, "", "  ")
+		return mcp.NewToolResultText(string(b)), nil
+	default:
+		msg := fmt.Sprintf("Query still running after 30 seconds (status: %s). Use s1_dv_get_events with queryId: %s to retrieve results later.\n\nWARNING: Do NOT run another s1_dv_query in parallel. Combine related searches into one query using OR chains to avoid 429 rate-limit errors.",
+			fallback(status.Status, "unknown"), queryID)
+		if dvWarning != "" {
+			msg += "\n\nNOTE: " + dvWarning
+		}
+		return mcp.NewToolResultText(msg), nil
 	}
-
-	result := map[string]string{
-		"queryId": queryID,
-		"status":  status.Status,
-		"message": "Query completed. Use s1_dv_get_events to retrieve results.",
-	}
-	b, _ := json.MarshalIndent(result, "", "  ")
-	return mcp.NewToolResultText(string(b)), nil
 }
 
 func handleDVGetEvents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -210,31 +336,47 @@ func handleDVGetEvents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallT
 	}
 	cursor := req.GetString("cursor", "")
 
-	// Check query status first
-	status, err := client.GetDVQueryStatus(queryID)
-	if err != nil {
-		return mcp.NewToolResultError(
-			fmt.Sprintf("Error getting Deep Visibility events: %v", err),
-		), nil
+	// Wait for query to finish if still running.
+	for i := 0; i < 30; i++ {
+		status, err := client.GetDVQueryStatus(queryID)
+		if err != nil {
+			return mcp.NewToolResultError(
+				fmt.Sprintf("Error getting Deep Visibility events: %v", err),
+			), nil
+		}
+		switch status.Status {
+		case "FINISHED":
+			goto ready
+		case "FAILED":
+			return mcp.NewToolResultError(
+				fmt.Sprintf("Query %s failed: %s", queryID, fallback(status.ResponseError, "Unknown error")),
+			), nil
+		case "CANCELED":
+			return mcp.NewToolResultError(
+				fmt.Sprintf("Query %s was canceled", queryID),
+			), nil
+		}
+		time.Sleep(1 * time.Second)
 	}
+	return mcp.NewToolResultText(
+		fmt.Sprintf("Query %s is still running after 30 seconds. Try again later.", queryID),
+	), nil
+ready:
 
-	switch status.Status {
-	case "RUNNING":
-		return mcp.NewToolResultText(
-			fmt.Sprintf("Query %s is still running (%d%% complete). Please wait and try again.",
-				queryID, status.ProgressStatus),
-		), nil
-	case "FAILED":
-		return mcp.NewToolResultError(
-			fmt.Sprintf("Query %s failed: %s", queryID, fallback(status.ResponseError, "Unknown error")),
-		), nil
-	case "CANCELED":
-		return mcp.NewToolResultError(
-			fmt.Sprintf("Query %s was canceled", queryID),
-		), nil
+	// Fetch events, retrying on 409 (S1 race: status says FINISHED but events not yet available).
+	var result *client.PaginatedResponse
+	for i := 0; i < 5; i++ {
+		result, err = client.GetDVEvents(queryID, limit, cursor)
+		if err == nil {
+			break
+		}
+		if !strings.Contains(err.Error(), "409") {
+			return mcp.NewToolResultError(
+				fmt.Sprintf("Error getting Deep Visibility events: %v", err),
+			), nil
+		}
+		time.Sleep(2 * time.Second)
 	}
-
-	result, err := client.GetDVEvents(queryID, limit, cursor)
 	if err != nil {
 		return mcp.NewToolResultError(
 			fmt.Sprintf("Error getting Deep Visibility events: %v", err),
