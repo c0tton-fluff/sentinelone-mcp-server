@@ -25,9 +25,10 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("SENTINELONE_API_BASE environment variable is required")
 	}
 
-	if _, err := url.ParseRequestURI(base); err != nil {
+	u, err := url.ParseRequestURI(base)
+	if err != nil || u.Scheme != "https" {
 		return nil, fmt.Errorf(
-			"SENTINELONE_API_BASE must be a valid URL (e.g., https://usea1.sentinelone.net): %w", err,
+			"SENTINELONE_API_BASE must be an HTTPS URL (e.g., https://usea1.sentinelone.net)",
 		)
 	}
 
