@@ -14,6 +14,10 @@ import (
 var dvQueryTool = mcp.NewTool("s1_dv_query",
 	mcp.WithDescription(`Run a Deep Visibility query. Returns queryId when complete.
 
+IMPORTANT: Do NOT run multiple s1_dv_query calls in parallel. The S1 API
+aggressively rate-limits query creation per token. Run DV queries sequentially
+and combine related searches into a single query using OR chains.
+
 Query syntax:
   <Field> <Operator> "<Value>" [AND|OR <Field> <Operator> "<Value>" ...]
 
@@ -76,7 +80,10 @@ Limitations:
 )
 
 var dvGetEventsTool = mcp.NewTool("s1_dv_get_events",
-	mcp.WithDescription("Get events from a completed Deep Visibility query"),
+	mcp.WithDescription(`Get events from a completed Deep Visibility query.
+
+IMPORTANT: Run s1_dv_get_events calls sequentially, not in parallel. The S1 API
+shares rate limits across all endpoints per token.`),
 	mcp.WithString("queryId",
 		mcp.Required(),
 		mcp.Description("Query ID returned from s1_dv_query"),
