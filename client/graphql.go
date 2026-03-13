@@ -32,6 +32,19 @@ type AlertsResult struct {
 	PageInfo AlertPageInfo
 }
 
+// normalizeStatus uppercases and maps common aliases to API values.
+func normalizeStatus(s string) string {
+	v := strings.ToUpper(strings.TrimSpace(s))
+	switch v {
+	case "UNRESOLVED", "OPEN":
+		return "NEW"
+	case "INPROGRESS":
+		return "IN_PROGRESS"
+	default:
+		return v
+	}
+}
+
 func QueryAlerts(
 	limit int,
 	cursor, severity, analystVerdict, incidentStatus, storylineID string,
@@ -42,19 +55,19 @@ func QueryAlerts(
 	if severity != "" {
 		filters = append(filters, alertFilter{
 			FieldID:     "severity",
-			StringEqual: &stringEqualFilter{Value: severity},
+			StringEqual: &stringEqualFilter{Value: strings.ToUpper(strings.TrimSpace(severity))},
 		})
 	}
 	if analystVerdict != "" {
 		filters = append(filters, alertFilter{
 			FieldID:     "analystVerdict",
-			StringEqual: &stringEqualFilter{Value: analystVerdict},
+			StringEqual: &stringEqualFilter{Value: strings.ToUpper(strings.TrimSpace(analystVerdict))},
 		})
 	}
 	if incidentStatus != "" {
 		filters = append(filters, alertFilter{
 			FieldID:     "status",
-			StringEqual: &stringEqualFilter{Value: incidentStatus},
+			StringEqual: &stringEqualFilter{Value: normalizeStatus(incidentStatus)},
 		})
 	}
 	if storylineID != "" {
