@@ -35,7 +35,7 @@ type DVStatus struct {
 	ResponseError  string `json:"responseError"`
 }
 
-const maxRetries = 3
+const maxRetries = 5
 
 func doRequest(method, endpoint string, body any) ([]byte, error) {
 	cfg := config.Get()

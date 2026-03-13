@@ -134,28 +134,30 @@ func summarizeEvent(e map[string]any) string {
 // invalidDVFields lists field names that are commonly confused with valid DV fields.
 var invalidDVFields = []string{"ObjectType", "ObjectName"}
 
-// validateDVQuery checks for common query mistakes before sending to the API.
-func validateDVQuery(query string) error {
+// validateDVQuery checks for common query mistakes and auto-fixes what it can.
+// Returns the (possibly sanitized) query and an error for unfixable issues.
+func validateDVQuery(query string) (string, error) {
 	for _, field := range invalidDVFields {
 		// Check for "FieldName <operator>" pattern (field used as a query field)
 		if strings.Contains(query, field+" ") {
-			return fmt.Errorf("%q is not a valid Deep Visibility field. Use EventType to filter by event type, or SrcProcImagePath / ProcessName for process filtering", field)
+			return "", fmt.Errorf("%q is not a valid Deep Visibility field. Use EventType to filter by event type, or SrcProcImagePath / ProcessName for process filtering", field)
 		}
 	}
 
-	// Check for trailing backslash before closing quote (breaks S1 parser)
+	// Auto-fix trailing backslash before closing quote (breaks S1 parser).
+	// e.g. "\\Temp\\" → "\\Temp" — safe for Contains/ContainsCIS matching.
 	if strings.Contains(query, `\"`) {
-		return fmt.Errorf("query contains backslash-quote sequence which will break the S1 parser. Avoid trailing backslashes in quoted values")
+		query = strings.ReplaceAll(query, `\"`, `"`)
 	}
 
 	// Check for mixed AND/OR without parentheses (S1 parser can't handle precedence)
 	hasAND := strings.Contains(strings.ToUpper(query), " AND ")
 	hasOR := strings.Contains(strings.ToUpper(query), " OR ")
 	if hasAND && hasOR {
-		return fmt.Errorf("query mixes AND and OR operators, which the S1 parser cannot handle without parentheses. Split into separate queries or use only AND or only OR in a single query")
+		return "", fmt.Errorf("query mixes AND and OR operators, which the S1 parser cannot handle without parentheses. Split into separate queries or use only AND or only OR in a single query")
 	}
 
-	return nil
+	return query, nil
 }
 
 func handleDVQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -172,7 +174,8 @@ func handleDVQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolR
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	if err := validateDVQuery(query); err != nil {
+	query, err = validateDVQuery(query)
+	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Invalid query: %v", err)), nil
 	}
 
