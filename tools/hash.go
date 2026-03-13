@@ -161,10 +161,5 @@ func handleHashReputation(ctx context.Context, req mcp.CallToolRequest) (*mcp.Ca
 		hashField, hash, len(agents), len(events.Data))
 	text := header + strings.Join(lines, "\n")
 
-	if events.Pagination != nil && events.Pagination.NextCursor != "" {
-		text += fmt.Sprintf("\n\n[More results - use s1_dv_get_events with queryId: %s, cursor: %s]",
-			queryID, events.Pagination.NextCursor)
-	}
-
 	return mcp.NewToolResultText(text), nil
 }

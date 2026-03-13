@@ -17,7 +17,7 @@ var listAgentsTool = mcp.NewTool("s1_list_agents",
 		mcp.Description("Search by computer name (partial match)"),
 	),
 	mcp.WithNumber("limit",
-		mcp.Description("Max results (default 10, max 50)"),
+		mcp.Description("Max results (default 50, max 200)"),
 	),
 	mcp.WithArray("osTypes",
 		mcp.Description("Filter by OS: windows, macos, linux"),
@@ -80,13 +80,13 @@ func summarizeAgent(a map[string]any) string {
 }
 
 func handleListAgents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	limit := int(req.GetFloat("limit", 10))
-	if limit < 1 || limit > 50 {
-		limit = 10
+	limit := int(req.GetFloat("limit", 50))
+	if limit < 1 || limit > 200 {
+		limit = 50
 	}
 
 	q := url.Values{}
-	q.Set("limit", strconv.Itoa(limit))
+	q.Set("limit", "50")
 
 	if v := req.GetString("computerName", ""); v != "" {
 		q.Set("computerName__contains", v)
@@ -107,21 +107,33 @@ func handleListAgents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 		q.Set("isInfected", strconv.FormatBool(v))
 	}
 
-	result, err := client.ListAgents(q)
-	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+	var allAgents []map[string]any
+	for {
+		result, err := client.ListAgents(q)
+		if err != nil {
+			return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+		}
+		allAgents = append(allAgents, result.Data...)
+		if len(allAgents) >= limit || result.Pagination == nil || result.Pagination.NextCursor == "" {
+			break
+		}
+		q.Set("cursor", result.Pagination.NextCursor)
 	}
 
-	if len(result.Data) == 0 {
+	if len(allAgents) > limit {
+		allAgents = allAgents[:limit]
+	}
+
+	if len(allAgents) == 0 {
 		return mcp.NewToolResultText("No agents found matching criteria."), nil
 	}
 
-	lines := make([]string, len(result.Data))
-	for i, a := range result.Data {
+	lines := make([]string, len(allAgents))
+	for i, a := range allAgents {
 		lines[i] = summarizeAgent(a)
 	}
 
-	text := fmt.Sprintf("Found %d agent(s):\n\n%s", len(result.Data), strings.Join(lines, "\n\n"))
+	text := fmt.Sprintf("Found %d agent(s):\n\n%s", len(allAgents), strings.Join(lines, "\n\n"))
 	return mcp.NewToolResultText(text), nil
 }
 
