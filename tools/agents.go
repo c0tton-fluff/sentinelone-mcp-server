@@ -87,6 +87,8 @@ func handleListAgents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 
 	q := url.Values{}
 	q.Set("limit", "50")
+	q.Set("sortBy", "updatedAt")
+	q.Set("sortOrder", "desc")
 
 	if v := req.GetString("computerName", ""); v != "" {
 		q.Set("computerName__contains", v)

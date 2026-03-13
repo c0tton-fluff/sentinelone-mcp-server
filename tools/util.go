@@ -67,6 +67,15 @@ func getBool(m map[string]any, key string) bool {
 	return v
 }
 
+// parseTime tries RFC3339 then RFC3339Nano.
+func parseTime(s string) (time.Time, bool) {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339Nano, s)
+	}
+	return t, err == nil
+}
+
 // fallback returns s if non-empty, otherwise def.
 func fallback(s, def string) string {
 	if s == "" {

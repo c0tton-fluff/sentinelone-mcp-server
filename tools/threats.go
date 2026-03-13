@@ -78,6 +78,8 @@ func handleListThreats(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallT
 
 	q := url.Values{}
 	q.Set("limit", "50")
+	q.Set("sortBy", "createdAt")
+	q.Set("sortOrder", "desc")
 
 	if v := req.GetString("computerName", ""); v != "" {
 		q.Set("computerName__contains", v)

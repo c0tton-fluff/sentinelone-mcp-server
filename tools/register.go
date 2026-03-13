@@ -18,4 +18,6 @@ func Register(s *server.MCPServer) {
 
 	s.AddTool(dvQueryTool, handleDVQuery)
 	s.AddTool(dvGetEventsTool, handleDVGetEvents)
+
+	s.AddTool(investigateThreatTool, handleInvestigateThreat)
 }
