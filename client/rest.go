@@ -30,7 +30,7 @@ type Pagination struct {
 // DVStatus represents a Deep Visibility query status.
 type DVStatus struct {
 	QueryID        string `json:"queryId"`
-	Status         string `json:"status"`
+	Status         string `json:"responseState"`
 	ProgressStatus int    `json:"progressStatus"`
 	ResponseError  string `json:"responseError"`
 }
