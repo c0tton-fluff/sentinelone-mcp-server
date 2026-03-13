@@ -135,20 +135,72 @@ func summarizeEvent(e map[string]any) string {
 // invalidDVFields lists field names that are commonly confused with valid DV fields.
 var invalidDVFields = []string{"ObjectType", "ObjectName"}
 
-// validateDVQuery checks for common query mistakes and auto-fixes what it can.
-// Returns the (possibly sanitized) query and an error for unfixable issues.
-func validateDVQuery(query string) (string, error) {
-	for _, field := range invalidDVFields {
-		// Check for "FieldName <operator>" pattern (field used as a query field)
-		if strings.Contains(query, field+" ") {
-			return "", fmt.Errorf("%q is not a valid Deep Visibility field. Use EventType to filter by event type, or SrcProcImagePath / ProcessName for process filtering", field)
+// fixBackslashesInDVValues strips backslashes from quoted string values in a
+// DV query. The S1 DV query parser has no backslash escape mechanism in string
+// literals, so bare backslashes cause parse errors — especially trailing \"
+// which swallows the closing quote. Stripping backslashes makes Contains matches
+// slightly broader (e.g., "\Temp" → "Temp") but never narrower.
+//
+// Backslashes inside RegExp values are preserved (regex syntax needs them).
+func fixBackslashesInDVValues(query string) (string, bool) {
+	var b strings.Builder
+	b.Grow(len(query))
+	modified := false
+	i := 0
+	isRegExp := false
+
+	for i < len(query) {
+		// Detect RegExp operator immediately before a quoted value.
+		if i+7 <= len(query) && query[i:i+7] == "RegExp " {
+			b.WriteString("RegExp ")
+			i += 7
+			isRegExp = true
+			continue
+		}
+
+		if query[i] == '"' {
+			b.WriteByte('"')
+			i++
+			// Inside a quoted value — strip backslashes unless RegExp.
+			for i < len(query) && query[i] != '"' {
+				if query[i] == '\\' && !isRegExp {
+					modified = true
+					i++
+					continue
+				}
+				b.WriteByte(query[i])
+				i++
+			}
+			if i < len(query) {
+				b.WriteByte('"')
+				i++
+			}
+			isRegExp = false
+		} else {
+			b.WriteByte(query[i])
+			i++
 		}
 	}
 
-	// Auto-fix trailing backslash before closing quote (breaks S1 parser).
-	// e.g. "\\Temp\\" → "\\Temp" — safe for Contains/ContainsCIS matching.
-	if strings.Contains(query, `\"`) {
-		query = strings.ReplaceAll(query, `\"`, `"`)
+	return b.String(), modified
+}
+
+// validateDVQuery checks for common query mistakes and auto-fixes what it can.
+// Returns the (possibly sanitized) query, a warning (empty if none), and an
+// error for unfixable issues.
+func validateDVQuery(query string) (string, string, error) {
+	for _, field := range invalidDVFields {
+		// Check for "FieldName <operator>" pattern (field used as a query field)
+		if strings.Contains(query, field+" ") {
+			return "", "", fmt.Errorf("%q is not a valid Deep Visibility field. Use EventType to filter by event type, or SrcProcImagePath / ProcessName for process filtering", field)
+		}
+	}
+
+	// Strip backslashes from quoted values (S1 DV parser doesn't support them).
+	var warning string
+	query, changed := fixBackslashesInDVValues(query)
+	if changed {
+		warning = "Backslashes were stripped from query values (S1 DV parser does not support them). Use forward slashes or omit path separators for reliable matching."
 	}
 
 	// Check for mixed AND/OR at the top level (outside parentheses).
@@ -178,10 +230,10 @@ func validateDVQuery(query string) (string, error) {
 		}
 	}
 	if hasTopAND && hasTopOR {
-		return "", fmt.Errorf("query mixes AND and OR at the top level. Group conditions with parentheses, e.g. A AND (B OR C), or split into separate queries")
+		return "", "", fmt.Errorf("query mixes AND and OR at the top level. Group conditions with parentheses, e.g. A AND (B OR C), or split into separate queries")
 	}
 
-	return query, nil
+	return query, warning, nil
 }
 
 func handleDVQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -198,7 +250,8 @@ func handleDVQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolR
 		return mcp.NewToolResultError(err.Error()), nil
 	}
 
-	query, err = validateDVQuery(query)
+	var dvWarning string
+	query, dvWarning, err = validateDVQuery(query)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Invalid query: %v", err)), nil
 	}
@@ -247,13 +300,18 @@ done:
 			"message": "Query completed. Use s1_dv_get_events to retrieve results.",
 			"warning": "Do NOT run another s1_dv_query in parallel. Combine related searches into one query using OR chains to avoid 429 rate-limit errors.",
 		}
+		if dvWarning != "" {
+			result["queryFixup"] = dvWarning
+		}
 		b, _ := json.MarshalIndent(result, "", "  ")
 		return mcp.NewToolResultText(string(b)), nil
 	default:
-		return mcp.NewToolResultText(
-			fmt.Sprintf("Query still running after 30 seconds (status: %s). Use s1_dv_get_events with queryId: %s to retrieve results later.\n\nWARNING: Do NOT run another s1_dv_query in parallel. Combine related searches into one query using OR chains to avoid 429 rate-limit errors.",
-				fallback(status.Status, "unknown"), queryID),
-		), nil
+		msg := fmt.Sprintf("Query still running after 30 seconds (status: %s). Use s1_dv_get_events with queryId: %s to retrieve results later.\n\nWARNING: Do NOT run another s1_dv_query in parallel. Combine related searches into one query using OR chains to avoid 429 rate-limit errors.",
+			fallback(status.Status, "unknown"), queryID)
+		if dvWarning != "" {
+			msg += "\n\nNOTE: " + dvWarning
+		}
+		return mcp.NewToolResultText(msg), nil
 	}
 }
 
