@@ -93,7 +93,7 @@ func handleHashReputation(ctx context.Context, args json.RawMessage) ToolResult 
 	var queryID string
 	var err error
 	for attempt := range 6 {
-		queryID, err = client.CreateDVQuery(ctx, dvQuery, fromDate, toDate, nil, nil, nil)
+		queryID, err = client.CreateDVQuery(ctx, dvQuery, fromDate, toDate, nil, nil)
 		if err == nil {
 			break
 		}
@@ -116,17 +116,21 @@ func handleHashReputation(ctx context.Context, args json.RawMessage) ToolResult 
 			return toolError(fmt.Sprintf("Error hunting hash: %v", err))
 		}
 		switch status.Status {
-		case "FINISHED", "FAILED", "CANCELED":
+		case "RUNNING", "PROCESS_RUNNING", "EVENTS_RUNNING":
+			// still running — keep polling
+		default:
 			goto pollDone
 		}
 	}
 pollDone:
 
 	switch status.Status {
-	case "FAILED":
+	case "FAILED", "FAILED_CLIENT", "ERROR":
 		return toolError(fmt.Sprintf("DV hash query failed: %s", fallback(status.ResponseError, "Unknown error")))
-	case "CANCELED":
+	case "QUERY_CANCELLED":
 		return toolError("DV hash query was canceled")
+	case "TIMED_OUT", "QUERY_EXPIRED":
+		return toolError(fmt.Sprintf("DV hash query %s", status.Status))
 	case "FINISHED":
 		// continue to fetch events below
 	default:

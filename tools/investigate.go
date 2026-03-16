@@ -91,7 +91,7 @@ func handleInvestigateThreat(ctx context.Context, args json.RawMessage) ToolResu
 		q := fmt.Sprintf(`AgentName = "%s" AND EventType In (%s) AND not SrcProcName In Anycase (%s)`,
 			computer, eventTypes, noiseFilter)
 		for i := range 6 {
-			queryID, dvErr = client.CreateDVQuery(ctx, q, from, to, nil, nil, nil)
+			queryID, dvErr = client.CreateDVQuery(ctx, q, from, to, nil, nil)
 			if dvErr == nil {
 				dvStarted = true
 				break
@@ -150,10 +150,14 @@ func pollAndFetchDVTimeline(ctx context.Context, queryID string) string {
 		if err != nil {
 			return fmt.Sprintf("\n---\nDV poll error: %v", err)
 		}
-		if status.Status == "FINISHED" || strings.HasPrefix(status.Status, "FAILED") || status.Status == "CANCELED" {
-			break
+		switch status.Status {
+		case "RUNNING", "PROCESS_RUNNING", "EVENTS_RUNNING":
+			// still running — keep polling
+		default:
+			goto pollDone
 		}
 	}
+pollDone:
 
 	if status.Status != "FINISHED" {
 		return fmt.Sprintf("\n---\nDV query did not complete (status: %s)", fallback(status.Status, "unknown"))

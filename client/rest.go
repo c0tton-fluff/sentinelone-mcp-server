@@ -200,7 +200,7 @@ func ReconnectAgent(ctx context.Context, id string) (int, error) {
 
 // -- Deep Visibility --
 
-func CreateDVQuery(ctx context.Context, query, fromDate, toDate string, siteIDs, groupIDs, accountIDs []string) (string, error) {
+func CreateDVQuery(ctx context.Context, query, fromDate, toDate string, siteIDs, accountIDs []string) (string, error) {
 	body := map[string]any{
 		"query":    query,
 		"fromDate": fromDate,
@@ -208,9 +208,6 @@ func CreateDVQuery(ctx context.Context, query, fromDate, toDate string, siteIDs,
 	}
 	if len(siteIDs) > 0 {
 		body["siteIds"] = siteIDs
-	}
-	if len(groupIDs) > 0 {
-		body["groupIds"] = groupIDs
 	}
 	if len(accountIDs) > 0 {
 		body["accountIds"] = accountIDs

@@ -84,11 +84,6 @@ Limitations:
 				"description": "Filter by site IDs",
 				"items":       map[string]any{"type": "string"},
 			},
-			"groupIds": map[string]any{
-				"type":        "array",
-				"description": "Filter by group IDs",
-				"items":       map[string]any{"type": "string"},
-			},
 			"accountIds": map[string]any{
 				"type":        "array",
 				"description": "Filter by account IDs",
@@ -273,7 +268,6 @@ func handleDVQuery(ctx context.Context, args json.RawMessage) ToolResult {
 		FromDate   string   `json:"fromDate"`
 		ToDate     string   `json:"toDate"`
 		SiteIDs    []string `json:"siteIds"`
-		GroupIDs   []string `json:"groupIds"`
 		AccountIDs []string `json:"accountIds"`
 	}
 	if len(args) > 0 {
@@ -294,7 +288,7 @@ func handleDVQuery(ctx context.Context, args json.RawMessage) ToolResult {
 		return toolError(fmt.Sprintf("Invalid query: %v", err))
 	}
 
-	queryID, err := client.CreateDVQuery(ctx, query, p.FromDate, p.ToDate, p.SiteIDs, p.GroupIDs, p.AccountIDs)
+	queryID, err := client.CreateDVQuery(ctx, query, p.FromDate, p.ToDate, p.SiteIDs, p.AccountIDs)
 	if err != nil {
 		return toolError(fmt.Sprintf("Error running Deep Visibility query: %v", err))
 	}
@@ -308,19 +302,23 @@ func handleDVQuery(ctx context.Context, args json.RawMessage) ToolResult {
 			return toolError(fmt.Sprintf("Error running Deep Visibility query: %v", err))
 		}
 		switch status.Status {
-		case "FINISHED", "FAILED", "CANCELED":
+		case "RUNNING", "PROCESS_RUNNING", "EVENTS_RUNNING":
+			// still running — keep polling
+		default:
 			goto done
 		}
 	}
 done:
 
 	switch status.Status {
-	case "FAILED":
+	case "FAILED", "FAILED_CLIENT", "ERROR":
 		return toolError(
 			fmt.Sprintf("Deep Visibility query failed: %s", fallback(status.ResponseError, "Unknown error")),
 		)
-	case "CANCELED":
+	case "QUERY_CANCELLED":
 		return toolError("Deep Visibility query was canceled")
+	case "TIMED_OUT", "QUERY_EXPIRED":
+		return toolError(fmt.Sprintf("Deep Visibility query %s", status.Status))
 	case "FINISHED":
 		result := map[string]string{
 			"queryId": queryID,
@@ -368,10 +366,16 @@ func handleDVGetEvents(ctx context.Context, args json.RawMessage) ToolResult {
 		switch status.Status {
 		case "FINISHED":
 			goto ready
-		case "FAILED":
+		case "FAILED", "FAILED_CLIENT", "ERROR":
 			return toolError(fmt.Sprintf("Query %s failed: %s", p.QueryID, fallback(status.ResponseError, "Unknown error")))
-		case "CANCELED":
+		case "QUERY_CANCELLED":
 			return toolError(fmt.Sprintf("Query %s was canceled", p.QueryID))
+		case "TIMED_OUT", "QUERY_EXPIRED":
+			return toolError(fmt.Sprintf("Query %s expired or timed out", p.QueryID))
+		case "RUNNING", "PROCESS_RUNNING", "EVENTS_RUNNING":
+			// still running — keep polling
+		default:
+			return toolError(fmt.Sprintf("Query %s unexpected status: %s", p.QueryID, status.Status))
 		}
 		time.Sleep(1 * time.Second)
 	}
