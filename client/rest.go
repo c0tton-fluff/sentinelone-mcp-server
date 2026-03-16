@@ -86,7 +86,7 @@ func doRequest(ctx context.Context, method, endpoint string, body any) ([]byte, 
 				}
 			}
 			time.Sleep(wait)
-			backoff *= 2
+			backoff = min(backoff*2, 60*time.Second)
 			continue
 		}
 

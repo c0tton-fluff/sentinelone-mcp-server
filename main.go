@@ -1,14 +1,15 @@
 package main
 
 import (
+	"bufio"
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"syscall"
 	"time"
 
 	"github.com/c0tton-fluff/sentinelone-mcp-server/config"
-	"github.com/c0tton-fluff/sentinelone-mcp-server/tools"
-	"github.com/mark3labs/mcp-go/server"
 )
 
 func main() {
@@ -19,17 +20,34 @@ func main() {
 
 	startWatchdog()
 
-	s := server.NewMCPServer(
-		"sentinelone",
-		"1.0.0",
-		server.WithToolCapabilities(false),
-	)
+	ctx := context.Background()
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+	encoder := json.NewEncoder(os.Stdout)
 
-	tools.Register(s)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
 
-	if err := server.ServeStdio(s); err != nil {
-		fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
-		os.Exit(1)
+		var req JSONRPCRequest
+		if err := json.Unmarshal(line, &req); err != nil {
+			continue
+		}
+
+		resp := HandleRequest(ctx, req)
+		if resp == nil {
+			continue
+		}
+
+		if err := encoder.Encode(resp); err != nil {
+			fmt.Fprintf(os.Stderr, "encode response: %v\n", err)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "stdin read error: %v\n", err)
 	}
 }
 

@@ -19,6 +19,8 @@ Thumbs.db
 
 # Claude Code
 .claude/
+CLAUDE.md
+docs/
 
 # Review output
 TODO.md

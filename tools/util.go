@@ -83,3 +83,37 @@ func fallback(s, def string) string {
 	}
 	return s
 }
+
+// MCP tool types.
+
+// ToolDef describes an MCP tool for the tools/list response.
+type ToolDef struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	InputSchema any    `json:"inputSchema"`
+}
+
+// ToolResult is the response from a tool call.
+type ToolResult struct {
+	Content []ToolContent `json:"content"`
+	IsError bool          `json:"isError,omitempty"`
+}
+
+// ToolContent is a single content block in a tool result.
+type ToolContent struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+func toolText(text string) ToolResult {
+	return ToolResult{
+		Content: []ToolContent{{Type: "text", Text: text}},
+	}
+}
+
+func toolError(msg string) ToolResult {
+	return ToolResult{
+		Content: []ToolContent{{Type: "text", Text: msg}},
+		IsError: true,
+	}
+}

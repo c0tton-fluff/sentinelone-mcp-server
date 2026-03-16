@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/c0tton-fluff/sentinelone-mcp-server/client"
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
-var dvQueryTool = mcp.NewTool("s1_dv_query",
-	mcp.WithDescription(`Run a Deep Visibility query. Returns queryId when complete.
+var dvQueryTool = ToolDef{
+	Name: "s1_dv_query",
+	Description: `Run a Deep Visibility query. Returns queryId when complete.
 
 IMPORTANT: Do NOT run multiple s1_dv_query calls in parallel. The S1 API
 aggressively rate-limits query creation per token. Run DV queries sequentially
@@ -62,46 +62,63 @@ Limitations:
     Use "\\Desktop" or Contains Anycase instead
   - Use parentheses to group when mixing AND/OR: A AND (B OR C OR D)
   - Nested parentheses are supported: A AND (B OR (C AND D))
-  - Max query window is 14 days`),
-	mcp.WithString("query",
-		mcp.Required(),
-		mcp.Description(`Deep Visibility query string. See tool description for syntax and valid fields.`),
-	),
-	mcp.WithString("fromDate",
-		mcp.Required(),
-		mcp.Description("Start date in ISO format (e.g., 2024-01-01T00:00:00Z)"),
-	),
-	mcp.WithString("toDate",
-		mcp.Required(),
-		mcp.Description("End date in ISO format (e.g., 2024-01-02T00:00:00Z)"),
-	),
-	mcp.WithArray("siteIds",
-		mcp.Description("Filter by site IDs"),
-		mcp.Items(map[string]any{"type": "string"}),
-	),
-	mcp.WithArray("groupIds",
-		mcp.Description("Filter by group IDs"),
-		mcp.Items(map[string]any{"type": "string"}),
-	),
-	mcp.WithArray("accountIds",
-		mcp.Description("Filter by account IDs"),
-		mcp.Items(map[string]any{"type": "string"}),
-	),
-)
+  - Max query window is 14 days`,
+	InputSchema: map[string]any{
+		"type":     "object",
+		"required": []string{"query", "fromDate", "toDate"},
+		"properties": map[string]any{
+			"query": map[string]any{
+				"type":        "string",
+				"description": "Deep Visibility query string. See tool description for syntax and valid fields.",
+			},
+			"fromDate": map[string]any{
+				"type":        "string",
+				"description": "Start date in ISO format (e.g., 2024-01-01T00:00:00Z)",
+			},
+			"toDate": map[string]any{
+				"type":        "string",
+				"description": "End date in ISO format (e.g., 2024-01-02T00:00:00Z)",
+			},
+			"siteIds": map[string]any{
+				"type":        "array",
+				"description": "Filter by site IDs",
+				"items":       map[string]any{"type": "string"},
+			},
+			"groupIds": map[string]any{
+				"type":        "array",
+				"description": "Filter by group IDs",
+				"items":       map[string]any{"type": "string"},
+			},
+			"accountIds": map[string]any{
+				"type":        "array",
+				"description": "Filter by account IDs",
+				"items":       map[string]any{"type": "string"},
+			},
+		},
+	},
+}
 
-var dvGetEventsTool = mcp.NewTool("s1_dv_get_events",
-	mcp.WithDescription(`Get events from a completed Deep Visibility query.
+var dvGetEventsTool = ToolDef{
+	Name: "s1_dv_get_events",
+	Description: `Get events from a completed Deep Visibility query.
 
 IMPORTANT: Run s1_dv_get_events calls sequentially, not in parallel. The S1 API
-shares rate limits across all endpoints per token.`),
-	mcp.WithString("queryId",
-		mcp.Required(),
-		mcp.Description("Query ID returned from s1_dv_query"),
-	),
-	mcp.WithNumber("limit",
-		mcp.Description("Max results (default 100, max 100)"),
-	),
-)
+shares rate limits across all endpoints per token.`,
+	InputSchema: map[string]any{
+		"type":     "object",
+		"required": []string{"queryId"},
+		"properties": map[string]any{
+			"queryId": map[string]any{
+				"type":        "string",
+				"description": "Query ID returned from s1_dv_query",
+			},
+			"limit": map[string]any{
+				"type":        "number",
+				"description": "Max results (default 100, max 100)",
+			},
+		},
+	},
+}
 
 func summarizeEvent(e map[string]any) string {
 	timeStr := "unknown"
@@ -250,46 +267,45 @@ func validateDVQuery(query string) (string, string, error) {
 	return query, warning, nil
 }
 
-func handleDVQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	query, err := req.RequireString("query")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func handleDVQuery(ctx context.Context, args json.RawMessage) ToolResult {
+	var p struct {
+		Query      string   `json:"query"`
+		FromDate   string   `json:"fromDate"`
+		ToDate     string   `json:"toDate"`
+		SiteIDs    []string `json:"siteIds"`
+		GroupIDs   []string `json:"groupIds"`
+		AccountIDs []string `json:"accountIds"`
 	}
-	fromDate, err := req.RequireString("fromDate")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+	if len(args) > 0 {
+		json.Unmarshal(args, &p)
 	}
-	toDate, err := req.RequireString("toDate")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+	if p.Query == "" {
+		return toolError("query is required")
+	}
+	if p.FromDate == "" {
+		return toolError("fromDate is required")
+	}
+	if p.ToDate == "" {
+		return toolError("toDate is required")
 	}
 
-	var dvWarning string
-	query, dvWarning, err = validateDVQuery(query)
+	query, dvWarning, err := validateDVQuery(p.Query)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Invalid query: %v", err)), nil
+		return toolError(fmt.Sprintf("Invalid query: %v", err))
 	}
 
-	siteIDs := req.GetStringSlice("siteIds", nil)
-	groupIDs := req.GetStringSlice("groupIds", nil)
-	accountIDs := req.GetStringSlice("accountIds", nil)
-
-	queryID, err := client.CreateDVQuery(ctx, query, fromDate, toDate, siteIDs, groupIDs, accountIDs)
+	queryID, err := client.CreateDVQuery(ctx, query, p.FromDate, p.ToDate, p.SiteIDs, p.GroupIDs, p.AccountIDs)
 	if err != nil {
-		return mcp.NewToolResultError(
-			fmt.Sprintf("Error running Deep Visibility query: %v", err),
-		), nil
+		return toolError(fmt.Sprintf("Error running Deep Visibility query: %v", err))
 	}
 
 	// Poll for completion — only break on known terminal states.
 	var status *client.DVStatus
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		time.Sleep(1 * time.Second)
 		status, err = client.GetDVQueryStatus(ctx, queryID)
 		if err != nil {
-			return mcp.NewToolResultError(
-				fmt.Sprintf("Error running Deep Visibility query: %v", err),
-			), nil
+			return toolError(fmt.Sprintf("Error running Deep Visibility query: %v", err))
 		}
 		switch status.Status {
 		case "FINISHED", "FAILED", "CANCELED":
@@ -300,13 +316,11 @@ done:
 
 	switch status.Status {
 	case "FAILED":
-		return mcp.NewToolResultError(
+		return toolError(
 			fmt.Sprintf("Deep Visibility query failed: %s", fallback(status.ResponseError, "Unknown error")),
-		), nil
+		)
 	case "CANCELED":
-		return mcp.NewToolResultError(
-			fmt.Sprintf("Deep Visibility query was canceled"),
-		), nil
+		return toolError("Deep Visibility query was canceled")
 	case "FINISHED":
 		result := map[string]string{
 			"queryId": queryID,
@@ -318,77 +332,71 @@ done:
 			result["queryFixup"] = dvWarning
 		}
 		b, _ := json.MarshalIndent(result, "", "  ")
-		return mcp.NewToolResultText(string(b)), nil
+		return toolText(string(b))
 	default:
 		msg := fmt.Sprintf("Query still running after 30 seconds (status: %s). Use s1_dv_get_events with queryId: %s to retrieve results later.\n\nWARNING: Do NOT run another s1_dv_query in parallel. Combine related searches into one query using OR chains to avoid 429 rate-limit errors.",
 			fallback(status.Status, "unknown"), queryID)
 		if dvWarning != "" {
 			msg += "\n\nNOTE: " + dvWarning
 		}
-		return mcp.NewToolResultText(msg), nil
+		return toolText(msg)
 	}
 }
 
-func handleDVGetEvents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	queryID, err := req.RequireString("queryId")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func handleDVGetEvents(ctx context.Context, args json.RawMessage) ToolResult {
+	var p struct {
+		QueryID string `json:"queryId"`
+		Limit   int    `json:"limit"`
 	}
-
-	limit := int(req.GetFloat("limit", 100))
-	if limit < 1 || limit > 100 {
-		limit = 100
+	p.Limit = 100
+	if len(args) > 0 {
+		json.Unmarshal(args, &p)
+	}
+	if p.QueryID == "" {
+		return toolError("queryId is required")
+	}
+	if p.Limit < 1 || p.Limit > 100 {
+		p.Limit = 100
 	}
 
 	// Wait for query to finish if still running.
-	for i := 0; i < 30; i++ {
-		status, err := client.GetDVQueryStatus(ctx, queryID)
+	for range 30 {
+		status, err := client.GetDVQueryStatus(ctx, p.QueryID)
 		if err != nil {
-			return mcp.NewToolResultError(
-				fmt.Sprintf("Error getting Deep Visibility events: %v", err),
-			), nil
+			return toolError(fmt.Sprintf("Error getting Deep Visibility events: %v", err))
 		}
 		switch status.Status {
 		case "FINISHED":
 			goto ready
 		case "FAILED":
-			return mcp.NewToolResultError(
-				fmt.Sprintf("Query %s failed: %s", queryID, fallback(status.ResponseError, "Unknown error")),
-			), nil
+			return toolError(fmt.Sprintf("Query %s failed: %s", p.QueryID, fallback(status.ResponseError, "Unknown error")))
 		case "CANCELED":
-			return mcp.NewToolResultError(
-				fmt.Sprintf("Query %s was canceled", queryID),
-			), nil
+			return toolError(fmt.Sprintf("Query %s was canceled", p.QueryID))
 		}
 		time.Sleep(1 * time.Second)
 	}
-	return mcp.NewToolResultText(
-		fmt.Sprintf("Query %s is still running after 30 seconds. Try again later.", queryID),
-	), nil
+	return toolText(fmt.Sprintf("Query %s is still running after 30 seconds. Try again later.", p.QueryID))
 ready:
 
 	// Fetch events, retrying on 409 (S1 race: status says FINISHED but events not yet available).
 	var result *client.PaginatedResponse
-	for i := 0; i < 5; i++ {
-		result, err = client.GetDVEvents(ctx, queryID, limit, "")
+	var err error
+	for range 5 {
+		result, err = client.GetDVEvents(ctx, p.QueryID, p.Limit, "")
 		if err == nil {
 			break
 		}
 		if !strings.Contains(err.Error(), "409") {
-			return mcp.NewToolResultError(
-				fmt.Sprintf("Error getting Deep Visibility events: %v", err),
-			), nil
+			return toolError(fmt.Sprintf("Error getting Deep Visibility events: %v", err))
 		}
 		time.Sleep(2 * time.Second)
 	}
 	if err != nil {
-		return mcp.NewToolResultError(
-			fmt.Sprintf("Error getting Deep Visibility events: %v", err),
-		), nil
+		return toolError(fmt.Sprintf("Error getting Deep Visibility events: %v", err))
 	}
 
 	if len(result.Data) == 0 {
-		return mcp.NewToolResultText("No events found for this query."), nil
+		return toolText("No events found for this query.")
 	}
 
 	lines := make([]string, len(result.Data))
@@ -396,6 +404,5 @@ ready:
 		lines[i] = summarizeEvent(e)
 	}
 
-	text := fmt.Sprintf("Found %d event(s):\n\n%s", len(result.Data), strings.Join(lines, "\n"))
-	return mcp.NewToolResultText(text), nil
+	return toolText(fmt.Sprintf("Found %d event(s):\n\n%s", len(result.Data), strings.Join(lines, "\n")))
 }

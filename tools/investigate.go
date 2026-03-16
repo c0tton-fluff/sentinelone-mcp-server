@@ -2,36 +2,48 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/c0tton-fluff/sentinelone-mcp-server/client"
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
-var investigateThreatTool = mcp.NewTool("s1_investigate_threat",
-	mcp.WithDescription(`Full threat investigation in one call. Fetches threat details,
+var investigateThreatTool = ToolDef{
+	Name: "s1_investigate_threat",
+	Description: `Full threat investigation in one call. Fetches threat details,
 correlated alerts by storyline, and a Deep Visibility timeline of endpoint
-activity around detection time (-1h to +1h). Replaces 4+ sequential tool calls.`),
-	mcp.WithString("threatId",
-		mcp.Required(),
-		mcp.Description("The threat ID to investigate"),
-	),
-)
+activity around detection time (-1h to +1h). Replaces 4+ sequential tool calls.`,
+	InputSchema: map[string]any{
+		"type":     "object",
+		"required": []string{"threatId"},
+		"properties": map[string]any{
+			"threatId": map[string]any{
+				"type":        "string",
+				"description": "The threat ID to investigate",
+			},
+		},
+	},
+}
 
-func handleInvestigateThreat(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	threatID, err := req.RequireString("threatId")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func handleInvestigateThreat(ctx context.Context, args json.RawMessage) ToolResult {
+	var p struct {
+		ThreatID string `json:"threatId"`
+	}
+	if len(args) > 0 {
+		json.Unmarshal(args, &p)
+	}
+	if p.ThreatID == "" {
+		return toolError("threatId is required")
 	}
 
-	result, err := client.GetThreat(ctx, threatID)
+	result, err := client.GetThreat(ctx, p.ThreatID)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+		return toolError(fmt.Sprintf("Error: %v", err))
 	}
 	if len(result.Data) == 0 {
-		return mcp.NewToolResultError(fmt.Sprintf("Threat %s not found", threatID)), nil
+		return toolError(fmt.Sprintf("Threat %s not found", p.ThreatID))
 	}
 
 	t := result.Data[0]
@@ -55,7 +67,7 @@ func handleInvestigateThreat(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		osName,
 		fallback(getStr(t, "agentDetectionInfo", "agentLastLoggedInUserName"), "Unknown"),
 		fallback(getStr(t, "threatInfo", "analystVerdict"), "undefined"))
-	fmt.Fprintf(&sb, "ID: %s | Storyline: %s\n", threatID, fallback(storylineID, "N/A"))
+	fmt.Fprintf(&sb, "ID: %s | Storyline: %s\n", p.ThreatID, fallback(storylineID, "N/A"))
 	if fp := getStr(t, "threatInfo", "filePath"); fp != "" {
 		fmt.Fprintf(&sb, "Path: %s\n", fp)
 	}
@@ -78,7 +90,7 @@ func handleInvestigateThreat(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		}
 		q := fmt.Sprintf(`AgentName = "%s" AND EventType In (%s) AND not SrcProcName In Anycase (%s)`,
 			computer, eventTypes, noiseFilter)
-		for i := 0; i < 6; i++ {
+		for i := range 6 {
 			queryID, dvErr = client.CreateDVQuery(ctx, q, from, to, nil, nil, nil)
 			if dvErr == nil {
 				dvStarted = true
@@ -124,7 +136,7 @@ func handleInvestigateThreat(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		sb.WriteString(pollAndFetchDVTimeline(ctx, queryID))
 	}
 
-	return mcp.NewToolResultText(sb.String()), nil
+	return toolText(sb.String())
 }
 
 // pollAndFetchDVTimeline waits for a DV query to finish, fetches events, and
@@ -132,7 +144,7 @@ func handleInvestigateThreat(ctx context.Context, req mcp.CallToolRequest) (*mcp
 func pollAndFetchDVTimeline(ctx context.Context, queryID string) string {
 	var status *client.DVStatus
 	var err error
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		time.Sleep(1 * time.Second)
 		status, err = client.GetDVQueryStatus(ctx, queryID)
 		if err != nil {
@@ -148,7 +160,7 @@ func pollAndFetchDVTimeline(ctx context.Context, queryID string) string {
 	}
 
 	var events *client.PaginatedResponse
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		events, err = client.GetDVEvents(ctx, queryID, 100, "")
 		if err == nil {
 			break
