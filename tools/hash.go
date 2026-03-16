@@ -15,14 +15,14 @@ var hexPattern = regexp.MustCompile(`^[a-fA-F0-9]+$`)
 
 var hashReputationTool = ToolDef{
 	Name:        "s1_hash_reputation",
-	Description: "Hunt a SHA1/SHA256 hash across the fleet via Deep Visibility. Returns endpoints, processes, and file paths where the hash was seen in the last 14 days.",
+	Description: "Look up a hash's reputation verdict and hunt it across the fleet via Deep Visibility. Returns the S1 verdict (malicious/suspicious/unknown) plus endpoints, processes, and file paths where the hash was seen in the last 14 days.",
 	InputSchema: map[string]any{
 		"type":     "object",
 		"required": []string{"hash"},
 		"properties": map[string]any{
 			"hash": map[string]any{
 				"type":        "string",
-				"description": "SHA1 (40 chars) or SHA256 (64 chars) hash to hunt across the fleet via Deep Visibility",
+				"description": "SHA1 (40 chars) or SHA256 (64 chars) hash to look up",
 			},
 		},
 	},
@@ -79,6 +79,9 @@ func handleHashReputation(ctx context.Context, args json.RawMessage) ToolResult 
 		return toolError("Invalid hash format. Hash must be hexadecimal characters only.")
 	}
 
+	// Fast verdict lookup via dedicated API.
+	verdict, verdictErr := client.GetHashVerdict(ctx, p.Hash)
+
 	hashField := "SHA1"
 	if len(p.Hash) == 64 {
 		hashField = "SHA256"
@@ -93,7 +96,7 @@ func handleHashReputation(ctx context.Context, args json.RawMessage) ToolResult 
 	var queryID string
 	var err error
 	for attempt := range 6 {
-		queryID, err = client.CreateDVQuery(ctx, dvQuery, fromDate, toDate, nil, nil, nil)
+		queryID, err = client.CreateDVQuery(ctx, dvQuery, fromDate, toDate, nil, nil)
 		if err == nil {
 			break
 		}
@@ -116,17 +119,21 @@ func handleHashReputation(ctx context.Context, args json.RawMessage) ToolResult 
 			return toolError(fmt.Sprintf("Error hunting hash: %v", err))
 		}
 		switch status.Status {
-		case "FINISHED", "FAILED", "CANCELED":
+		case "RUNNING", "PROCESS_RUNNING", "EVENTS_RUNNING":
+			// still running — keep polling
+		default:
 			goto pollDone
 		}
 	}
 pollDone:
 
 	switch status.Status {
-	case "FAILED":
+	case "FAILED", "FAILED_CLIENT", "ERROR":
 		return toolError(fmt.Sprintf("DV hash query failed: %s", fallback(status.ResponseError, "Unknown error")))
-	case "CANCELED":
+	case "QUERY_CANCELLED":
 		return toolError("DV hash query was canceled")
+	case "TIMED_OUT", "QUERY_EXPIRED":
+		return toolError(fmt.Sprintf("DV hash query %s", status.Status))
 	case "FINISHED":
 		// continue to fetch events below
 	default:
@@ -150,8 +157,13 @@ pollDone:
 		return toolText(fmt.Sprintf("Query completed but events not available after retries. Use s1_dv_get_events with queryId: %s", queryID))
 	}
 
+	verdictLine := ""
+	if verdictErr == nil && verdict != "" {
+		verdictLine = fmt.Sprintf("Verdict: %s\n", verdict)
+	}
+
 	if len(events.Data) == 0 {
-		return toolText(fmt.Sprintf("No activity found for %s %s in the last 14 days.", hashField, p.Hash))
+		return toolText(fmt.Sprintf("%sNo activity found for %s %s in the last 14 days.", verdictLine, hashField, p.Hash))
 	}
 
 	// Deduplicate by agent to show fleet spread
@@ -165,7 +177,7 @@ pollDone:
 		lines[i] = summarizeHashEvent(e)
 	}
 
-	header := fmt.Sprintf("Hash %s %s\nSeen on %d endpoint(s) | %d event(s) in last 14 days:\n\n",
-		hashField, p.Hash, len(agents), len(events.Data))
+	header := fmt.Sprintf("%sHash %s %s\nSeen on %d endpoint(s) | %d event(s) in last 14 days:\n\n",
+		verdictLine, hashField, p.Hash, len(agents), len(events.Data))
 	return toolText(header + strings.Join(lines, "\n"))
 }

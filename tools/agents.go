@@ -42,7 +42,7 @@ var listAgentsTool = ToolDef{
 			},
 			"networkStatuses": map[string]any{
 				"type":        "array",
-				"description": "Filter: connected, disconnected",
+				"description": "Filter: connected, disconnected, connecting, disconnecting",
 				"items":       map[string]any{"type": "string"},
 			},
 			"countBy": map[string]any{
@@ -154,7 +154,7 @@ func handleListAgents(ctx context.Context, args json.RawMessage) ToolResult {
 		q.Set("isActive", strconv.FormatBool(*p.IsActive))
 	}
 	if p.IsInfected != nil {
-		q.Set("isInfected", strconv.FormatBool(*p.IsInfected))
+		q.Set("infected", strconv.FormatBool(*p.IsInfected))
 	}
 
 	// When countBy is set, fetch all agents (no limit)
