@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- Bump Go version from 1.23 to 1.26
+- Replace `mcp-go` framework with stdlib-only MCP/JSON-RPC implementation (zero external dependencies)
+- Modernize loops and sort calls to use Go 1.22+ range-over-int and `slices`/`maps` packages
+- Cap HTTP 429 retry backoff at 60 seconds
+
+## [1.5.0] - 2026-03-15
+
+### Added
+- `s1_investigate_threat` tool — full investigation in one call (threat details, correlated alerts, DV timeline)
+- `countBy` parameter on `s1_list_agents` — group agent counts by user, os, site, or group
+- Auto-pagination on all list tools (`s1_list_threats`, `s1_list_agents`, `s1_list_alerts`)
+- Configurable limits up to 200 results on list tools (was capped at 50)
+- HTTP 429 retry with exponential backoff and `Retry-After` header support
+- DV query validation: reject invalid fields (ObjectType), auto-fix backslash-quote issues, reject mixed AND/OR without parentheses
+- Retry on 409 for DV query creation and event retrieval
+- S1QL syntax reference in DV tool descriptions
+
+### Fixed
+- Alert status filter normalization (accept "unresolved", "open", "inprogress" as aliases)
+- DV query status parsing (`responseState` field, not `status`)
+- DV polling loop only breaks on terminal states (FINISHED, FAILED, CANCELED)
+
+### Security
+- Enforce HTTPS on API base URL — reject http:// to prevent cleartext API key transmission
+
 ## [1.0.0] - 2026-02-14
 
 ### Added
