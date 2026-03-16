@@ -59,7 +59,7 @@ var getThreatTool = ToolDef{
 
 var mitigateThreatTool = ToolDef{
 	Name:        "s1_mitigate_threat",
-	Description: "Mitigate a threat: kill (terminate process), quarantine (isolate file), remediate (full cleanup), rollback-remediation (undo)",
+	Description: "Mitigate a threat: kill (terminate process), quarantine (isolate file), un-quarantine (undo quarantine), remediate (full cleanup), rollback-remediation (undo remediation)",
 	InputSchema: map[string]any{
 		"type":     "object",
 		"required": []string{"threatId", "action"},
@@ -70,8 +70,8 @@ var mitigateThreatTool = ToolDef{
 			},
 			"action": map[string]any{
 				"type":        "string",
-				"description": "Action: kill, quarantine, remediate, rollback-remediation",
-				"enum":        []string{"kill", "quarantine", "remediate", "rollback-remediation"},
+				"description": "Action: kill, quarantine, un-quarantine, remediate, rollback-remediation",
+				"enum":        []string{"kill", "quarantine", "un-quarantine", "remediate", "rollback-remediation"},
 			},
 		},
 	},

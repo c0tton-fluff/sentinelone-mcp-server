@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/c0tton-fluff/sentinelone-mcp-server/client"
 )
@@ -13,8 +12,8 @@ import (
 var investigateThreatTool = ToolDef{
 	Name: "s1_investigate_threat",
 	Description: `Full threat investigation in one call. Fetches threat details,
-correlated alerts by storyline, and a Deep Visibility timeline of endpoint
-activity around detection time (-1h to +1h). Replaces 4+ sequential tool calls.`,
+correlated alerts by storyline, and the threat timeline. Replaces 3+
+sequential tool calls.`,
 	InputSchema: map[string]any{
 		"type":     "object",
 		"required": []string{"threatId"},
@@ -75,35 +74,7 @@ func handleInvestigateThreat(ctx context.Context, args json.RawMessage) ToolResu
 		fmt.Fprintf(&sb, "SHA256: %s\n", h)
 	}
 
-	// Start DV query (runs server-side while we fetch alerts next).
-	var queryID string
-	var dvStarted bool
-	var dvErr error
-	if threatTime, ok := parseTime(createdAt); ok && computer != "" {
-		from := threatTime.Add(-1 * time.Hour).Format(time.RFC3339)
-		to := threatTime.Add(1 * time.Hour).Format(time.RFC3339)
-		eventTypes := `"Process Creation","File Creation","IP Connect","DNS Resolved","Behavioral Indicators"`
-		noiseFilter := `"poll_calendar","mds_stores","mDNSResponder","cfprefsd"`
-		if strings.Contains(strings.ToLower(osName), "windows") {
-			eventTypes += `,"Registry Key Creation","Registry Value Modified"`
-			noiseFilter = `"svchost.exe","SearchProtocolHost.exe","backgroundtaskhost.exe","RuntimeBroker.exe"`
-		}
-		q := fmt.Sprintf(`AgentName = "%s" AND EventType In (%s) AND not SrcProcName In Anycase (%s)`,
-			computer, eventTypes, noiseFilter)
-		for i := range 6 {
-			queryID, dvErr = client.CreateDVQuery(ctx, q, from, to, nil, nil)
-			if dvErr == nil {
-				dvStarted = true
-				break
-			}
-			if !strings.Contains(dvErr.Error(), "409") || i == 5 {
-				break
-			}
-			time.Sleep(3 * time.Second)
-		}
-	}
-
-	// Fetch correlated alerts (DV query processing server-side in parallel).
+	// Fetch correlated alerts.
 	sb.WriteString("\nALERTS")
 	if storylineID == "" {
 		sb.WriteString("\n---\nNo storyline ID available.")
@@ -124,93 +95,40 @@ func handleInvestigateThreat(ctx context.Context, args json.RawMessage) ToolResu
 		}
 	}
 
-	// Poll DV query and fetch timeline.
+	// Fetch threat timeline via dedicated API (faster than DV, no rate-limit impact).
 	sb.WriteString("\n\nTIMELINE")
-	if !dvStarted {
-		if dvErr != nil {
-			fmt.Fprintf(&sb, "\n---\nDV query failed: %v", dvErr)
-		} else {
-			sb.WriteString("\n---\nInsufficient data (need agent name + timestamp).")
-		}
+	timeline, tlErr := client.GetThreatTimeline(ctx, p.ThreatID, 50)
+	if tlErr != nil {
+		fmt.Fprintf(&sb, "\n---\nError: %v", tlErr)
+	} else if len(timeline.Data) == 0 {
+		sb.WriteString("\n---\nNo timeline events.")
 	} else {
-		sb.WriteString(pollAndFetchDVTimeline(ctx, queryID))
+		fmt.Fprintf(&sb, " (%d events)\n---\n", len(timeline.Data))
+		for _, e := range timeline.Data {
+			sb.WriteString(summarizeTimelineEvent(e))
+			sb.WriteByte('\n')
+		}
 	}
 
 	return toolText(sb.String())
 }
 
-// pollAndFetchDVTimeline waits for a DV query to finish, fetches events, and
-// returns a formatted string to append to the investigation output.
-func pollAndFetchDVTimeline(ctx context.Context, queryID string) string {
-	var status *client.DVStatus
-	var err error
-	for range 30 {
-		time.Sleep(1 * time.Second)
-		status, err = client.GetDVQueryStatus(ctx, queryID)
-		if err != nil {
-			return fmt.Sprintf("\n---\nDV poll error: %v", err)
-		}
-		switch status.Status {
-		case "RUNNING", "PROCESS_RUNNING", "EVENTS_RUNNING":
-			// still running — keep polling
-		default:
-			goto pollDone
-		}
-	}
-pollDone:
+func summarizeTimelineEvent(e map[string]any) string {
+	activityType := fallback(getStr(e, "activityType"), "")
+	primary := fallback(getStr(e, "primaryDescription"), "")
+	secondary := getStr(e, "secondaryDescription")
 
-	if status.Status != "FINISHED" {
-		return fmt.Sprintf("\n---\nDV query did not complete (status: %s)", fallback(status.Status, "unknown"))
+	timeStr := "unknown"
+	if d := getStr(e, "createdAt"); d != "" {
+		timeStr = formatTimeAgo(d)
 	}
 
-	var events *client.PaginatedResponse
-	for range 5 {
-		events, err = client.GetDVEvents(ctx, queryID, 100, "")
-		if err == nil {
-			break
-		}
-		if !strings.Contains(err.Error(), "409") {
-			return fmt.Sprintf("\n---\nDV events error: %v", err)
-		}
-		time.Sleep(2 * time.Second)
+	line := fmt.Sprintf("- [%s] %s", timeStr, primary)
+	if activityType != "" && activityType != primary {
+		line = fmt.Sprintf("- [%s] %s: %s", timeStr, activityType, primary)
 	}
-	if err != nil {
-		return fmt.Sprintf("\n---\nDV events error: %v", err)
+	if secondary != "" {
+		line += " — " + secondary
 	}
-	if len(events.Data) == 0 {
-		return "\n---\nNo events in time window."
-	}
-
-	// Deduplicate: group by eventType+processName, show count for repeats.
-	type eventKey struct{ eventType, process string }
-	type eventGroup struct {
-		key   eventKey
-		line  string
-		count int
-	}
-	var groups []eventGroup
-	seen := make(map[eventKey]int) // key -> index in groups
-	for _, e := range events.Data {
-		k := eventKey{
-			eventType: fallback(getStr(e, "eventType"), "Unknown"),
-			process:   fallback(getStr(e, "processName"), "N/A"),
-		}
-		if idx, ok := seen[k]; ok {
-			groups[idx].count++
-		} else {
-			seen[k] = len(groups)
-			groups = append(groups, eventGroup{key: k, line: summarizeEvent(e), count: 1})
-		}
-	}
-
-	lines := make([]string, len(groups))
-	for i, g := range groups {
-		if g.count > 1 {
-			lines[i] = fmt.Sprintf("%s (x%d)", g.line, g.count)
-		} else {
-			lines[i] = g.line
-		}
-	}
-	return fmt.Sprintf(" (%d events, %d unique, -1h to +1h)\n---\n%s",
-		len(events.Data), len(groups), strings.Join(lines, "\n"))
+	return line
 }

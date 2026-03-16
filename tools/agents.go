@@ -42,7 +42,7 @@ var listAgentsTool = ToolDef{
 			},
 			"networkStatuses": map[string]any{
 				"type":        "array",
-				"description": "Filter: connected, disconnected",
+				"description": "Filter: connected, disconnected, connecting, disconnecting",
 				"items":       map[string]any{"type": "string"},
 			},
 			"countBy": map[string]any{

@@ -176,6 +176,15 @@ func MitigateThreat(ctx context.Context, id, action string) (int, error) {
 	return doFilterPost(ctx, "/threats/mitigate/"+url.PathEscape(action), []string{id})
 }
 
+func GetThreatTimeline(ctx context.Context, threatID string, limit int) (*PaginatedResponse, error) {
+	q := url.Values{}
+	if limit > 0 {
+		q.Set("limit", fmt.Sprintf("%d", limit))
+	}
+	q.Set("sortOrder", "asc")
+	return doGet(ctx, "/threats/"+url.PathEscape(threatID)+"/timeline?"+q.Encode())
+}
+
 // -- Agents --
 
 func ListAgents(ctx context.Context, q url.Values) (*PaginatedResponse, error) {
@@ -196,6 +205,24 @@ func IsolateAgent(ctx context.Context, id string) (int, error) {
 
 func ReconnectAgent(ctx context.Context, id string) (int, error) {
 	return doFilterPost(ctx, "/agents/actions/connect", []string{id})
+}
+
+// -- Hashes --
+
+func GetHashVerdict(ctx context.Context, hash string) (string, error) {
+	data, err := doRequest(ctx, "GET", "/hashes/"+url.PathEscape(hash)+"/verdict", nil)
+	if err != nil {
+		return "", err
+	}
+	var resp struct {
+		Data struct {
+			Verdict string `json:"verdict"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return "", fmt.Errorf("parse response: %w", err)
+	}
+	return resp.Data.Verdict, nil
 }
 
 // -- Deep Visibility --
