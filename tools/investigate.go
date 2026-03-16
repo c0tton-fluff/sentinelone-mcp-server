@@ -78,7 +78,7 @@ func handleInvestigateThreat(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		}
 		q := fmt.Sprintf(`AgentName = "%s" AND EventType In (%s) AND not SrcProcName In Anycase (%s)`,
 			computer, eventTypes, noiseFilter)
-		for i := 0; i < 6; i++ {
+		for i := range 6 {
 			queryID, dvErr = client.CreateDVQuery(ctx, q, from, to, nil, nil, nil)
 			if dvErr == nil {
 				dvStarted = true
@@ -132,7 +132,7 @@ func handleInvestigateThreat(ctx context.Context, req mcp.CallToolRequest) (*mcp
 func pollAndFetchDVTimeline(ctx context.Context, queryID string) string {
 	var status *client.DVStatus
 	var err error
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		time.Sleep(1 * time.Second)
 		status, err = client.GetDVQueryStatus(ctx, queryID)
 		if err != nil {
@@ -148,7 +148,7 @@ func pollAndFetchDVTimeline(ctx context.Context, queryID string) string {
 	}
 
 	var events *client.PaginatedResponse
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		events, err = client.GetDVEvents(ctx, queryID, 100, "")
 		if err == nil {
 			break

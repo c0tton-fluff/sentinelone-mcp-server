@@ -1,6 +1,6 @@
 module github.com/c0tton-fluff/sentinelone-mcp-server
 
-go 1.23.0
+go 1.26.0
 
 require github.com/mark3labs/mcp-go v0.45.0
 

@@ -283,7 +283,7 @@ func handleDVQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolR
 
 	// Poll for completion — only break on known terminal states.
 	var status *client.DVStatus
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		time.Sleep(1 * time.Second)
 		status, err = client.GetDVQueryStatus(ctx, queryID)
 		if err != nil {
@@ -341,7 +341,7 @@ func handleDVGetEvents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallT
 	}
 
 	// Wait for query to finish if still running.
-	for i := 0; i < 30; i++ {
+	for range 30 {
 		status, err := client.GetDVQueryStatus(ctx, queryID)
 		if err != nil {
 			return mcp.NewToolResultError(
@@ -369,7 +369,7 @@ ready:
 
 	// Fetch events, retrying on 409 (S1 race: status says FINISHED but events not yet available).
 	var result *client.PaginatedResponse
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		result, err = client.GetDVEvents(ctx, queryID, limit, "")
 		if err == nil {
 			break
