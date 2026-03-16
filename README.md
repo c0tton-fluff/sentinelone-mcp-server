@@ -8,11 +8,11 @@ MCP server for [SentinelOne](https://www.sentinelone.com/) integration. Enables 
 
 ## Features
 
-- **Threat management** - List, inspect, and mitigate threats (kill, quarantine, remediate, rollback)
-- **Threat investigation** - Full investigation in one call: threat details, correlated alerts, and DV timeline
+- **Threat management** - List, inspect, and mitigate threats (kill, quarantine, un-quarantine, remediate, rollback)
+- **Threat investigation** - Full investigation in one call: threat details, correlated alerts, and timeline
 - **Agent operations** - List agents, get details, group counts, network isolate/reconnect endpoints
 - **Unified alerts** - Query alerts via GraphQL with severity, verdict, and storyline filters
-- **Hash intelligence** - SHA1/SHA256 fleet-wide hash hunting via Deep Visibility
+- **Hash intelligence** - Instant hash verdict plus SHA1/SHA256 fleet-wide hunting via Deep Visibility
 - **Deep Visibility** - Run threat hunting queries with automatic polling and pagination
 - **Error sanitization** - API keys are redacted from all error messages
 - **Zero dependencies** - stdlib-only Go binary, no external packages
@@ -71,8 +71,8 @@ Add to `~/.mcp.json`:
 |------|-------------|
 | `s1_list_threats` | List threats with classification, status, and computer filters |
 | `s1_get_threat` | Get threat details including hashes, file path, and storyline |
-| `s1_mitigate_threat` | Kill, quarantine, remediate, or rollback a threat |
-| `s1_investigate_threat` | Full investigation: threat details, correlated alerts, and DV timeline |
+| `s1_mitigate_threat` | Kill, quarantine, un-quarantine, remediate, or rollback a threat |
+| `s1_investigate_threat` | Full investigation: threat details, correlated alerts, and timeline |
 
 ### Agents
 
@@ -93,7 +93,7 @@ Add to `~/.mcp.json`:
 
 | Tool | Description |
 |------|-------------|
-| `s1_hash_reputation` | Hunt a SHA1/SHA256 hash across the fleet via Deep Visibility |
+| `s1_hash_reputation` | Hash verdict lookup plus fleet-wide hunt via Deep Visibility |
 
 ### Deep Visibility
 
@@ -123,7 +123,7 @@ Add to `~/.mcp.json`:
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `threatId` | string | **Required.** The threat ID to mitigate |
-| `action` | string | **Required.** kill, quarantine, remediate, rollback-remediation |
+| `action` | string | **Required.** kill, quarantine, un-quarantine, remediate, rollback-remediation |
 
 ### s1_investigate_threat
 | Parameter | Type | Description |
@@ -138,7 +138,7 @@ Add to `~/.mcp.json`:
 | `osTypes` | string[] | Filter by OS: windows, macos, linux |
 | `isActive` | boolean | Filter by active status |
 | `isInfected` | boolean | Filter by infected status |
-| `networkStatuses` | string[] | Filter: connected, disconnected |
+| `networkStatuses` | string[] | Filter: connected, disconnected, connecting, disconnecting |
 | `countBy` | string | Group counts by field: user, os, site, group |
 
 ### s1_get_agent
@@ -173,7 +173,6 @@ Add to `~/.mcp.json`:
 | `fromDate` | string | **Required.** Start date in ISO format |
 | `toDate` | string | **Required.** End date in ISO format |
 | `siteIds` | string[] | Filter by site IDs |
-| `groupIds` | string[] | Filter by group IDs |
 | `accountIds` | string[] | Filter by account IDs |
 
 ### s1_dv_get_events

@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Hash verdict lookup via `GET /hashes/{hash}/verdict` — `s1_hash_reputation` now returns instant S1 verdict before DV fleet hunt
+- Threat timeline via `GET /threats/{id}/timeline` — `s1_investigate_threat` uses dedicated API instead of DV queries (faster, no rate-limit impact)
+- `un-quarantine` mitigation action on `s1_mitigate_threat`
+
+### Fixed
+- Agent `infected` filter was sent as `isInfected` (silently ignored by S1 API)
+- DV query status polling: handle all terminal states (`QUERY_CANCELLED`, `FAILED_CLIENT`, `ERROR`, `TIMED_OUT`, `QUERY_EXPIRED`)
+- Remove unsupported `groupIds` parameter from DV init-query
+- `networkStatuses` filter description now includes `connecting`/`disconnecting`
+
 ### Changed
 - Bump Go version from 1.23 to 1.26
 - Replace `mcp-go` framework with stdlib-only MCP/JSON-RPC implementation (zero external dependencies)
