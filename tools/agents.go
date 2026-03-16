@@ -3,8 +3,9 @@ package tools
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -167,11 +168,7 @@ var countByFields = map[string]string{
 func handleCountBy(field string, agents []map[string]any, totalItems int) (*mcp.CallToolResult, error) {
 	apiField, ok := countByFields[field]
 	if !ok {
-		valid := make([]string, 0, len(countByFields))
-		for k := range countByFields {
-			valid = append(valid, k)
-		}
-		sort.Strings(valid)
+		valid := slices.Sorted(maps.Keys(countByFields))
 		return mcp.NewToolResultError(fmt.Sprintf("Invalid countBy field %q. Valid: %s", field, strings.Join(valid, ", "))), nil
 	}
 
@@ -190,8 +187,8 @@ func handleCountBy(field string, agents []map[string]any, totalItems int) (*mcp.
 	for k, v := range counts {
 		sorted = append(sorted, kv{k, v})
 	}
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Count > sorted[j].Count
+	slices.SortFunc(sorted, func(a, b kv) int {
+		return b.Count - a.Count
 	})
 
 	lines := make([]string, len(sorted))
