@@ -1,23 +1,57 @@
 package tools
 
-import "github.com/mark3labs/mcp-go/server"
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+)
 
-func Register(s *server.MCPServer) {
-	s.AddTool(listThreatsTool, handleListThreats)
-	s.AddTool(getThreatTool, handleGetThreat)
-	s.AddTool(mitigateThreatTool, handleMitigateThreat)
+// AllTools returns all MCP tool definitions.
+func AllTools() []ToolDef {
+	return []ToolDef{
+		listThreatsTool,
+		getThreatTool,
+		mitigateThreatTool,
+		listAgentsTool,
+		getAgentTool,
+		isolateAgentTool,
+		reconnectAgentTool,
+		listAlertsTool,
+		hashReputationTool,
+		dvQueryTool,
+		dvGetEventsTool,
+		investigateThreatTool,
+	}
+}
 
-	s.AddTool(listAgentsTool, handleListAgents)
-	s.AddTool(getAgentTool, handleGetAgent)
-	s.AddTool(isolateAgentTool, handleIsolateAgent)
-	s.AddTool(reconnectAgentTool, handleReconnectAgent)
-
-	s.AddTool(listAlertsTool, handleListAlerts)
-
-	s.AddTool(hashReputationTool, handleHashReputation)
-
-	s.AddTool(dvQueryTool, handleDVQuery)
-	s.AddTool(dvGetEventsTool, handleDVGetEvents)
-
-	s.AddTool(investigateThreatTool, handleInvestigateThreat)
+// DispatchTool routes a tool call to the appropriate handler.
+func DispatchTool(ctx context.Context, name string, args json.RawMessage) ToolResult {
+	switch name {
+	case "s1_list_threats":
+		return handleListThreats(ctx, args)
+	case "s1_get_threat":
+		return handleGetThreat(ctx, args)
+	case "s1_mitigate_threat":
+		return handleMitigateThreat(ctx, args)
+	case "s1_list_agents":
+		return handleListAgents(ctx, args)
+	case "s1_get_agent":
+		return handleGetAgent(ctx, args)
+	case "s1_isolate_agent":
+		return handleIsolateAgent(ctx, args)
+	case "s1_reconnect_agent":
+		return handleReconnectAgent(ctx, args)
+	case "s1_list_alerts":
+		return handleListAlerts(ctx, args)
+	case "s1_hash_reputation":
+		return handleHashReputation(ctx, args)
+	case "s1_dv_query":
+		return handleDVQuery(ctx, args)
+	case "s1_dv_get_events":
+		return handleDVGetEvents(ctx, args)
+	case "s1_investigate_threat":
+		return handleInvestigateThreat(ctx, args)
+	default:
+		return toolError(fmt.Sprintf("unknown tool: %s", name))
+	}
 }

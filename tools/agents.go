@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net/url"
@@ -10,59 +11,92 @@ import (
 	"strings"
 
 	"github.com/c0tton-fluff/sentinelone-mcp-server/client"
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
-var listAgentsTool = mcp.NewTool("s1_list_agents",
-	mcp.WithDescription("List SentinelOne agents with optional filters"),
-	mcp.WithString("computerName",
-		mcp.Description("Search by computer name (partial match)"),
-	),
-	mcp.WithNumber("limit",
-		mcp.Description("Max results (default 50, max 200)"),
-	),
-	mcp.WithArray("osTypes",
-		mcp.Description("Filter by OS: windows, macos, linux"),
-		mcp.Items(map[string]any{"type": "string"}),
-	),
-	mcp.WithBoolean("isActive",
-		mcp.Description("Filter by active status"),
-	),
-	mcp.WithBoolean("isInfected",
-		mcp.Description("Filter by infected status"),
-	),
-	mcp.WithArray("networkStatuses",
-		mcp.Description("Filter: connected, disconnected"),
-		mcp.Items(map[string]any{"type": "string"}),
-	),
-	mcp.WithString("countBy",
-		mcp.Description("Fetch all agents and group counts by field: user, os, site, group"),
-	),
-)
+var listAgentsTool = ToolDef{
+	Name:        "s1_list_agents",
+	Description: "List SentinelOne agents with optional filters",
+	InputSchema: map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"computerName": map[string]any{
+				"type":        "string",
+				"description": "Search by computer name (partial match)",
+			},
+			"limit": map[string]any{
+				"type":        "number",
+				"description": "Max results (default 50, max 200)",
+			},
+			"osTypes": map[string]any{
+				"type":        "array",
+				"description": "Filter by OS: windows, macos, linux",
+				"items":       map[string]any{"type": "string"},
+			},
+			"isActive": map[string]any{
+				"type":        "boolean",
+				"description": "Filter by active status",
+			},
+			"isInfected": map[string]any{
+				"type":        "boolean",
+				"description": "Filter by infected status",
+			},
+			"networkStatuses": map[string]any{
+				"type":        "array",
+				"description": "Filter: connected, disconnected",
+				"items":       map[string]any{"type": "string"},
+			},
+			"countBy": map[string]any{
+				"type":        "string",
+				"description": "Fetch all agents and group counts by field: user, os, site, group",
+			},
+		},
+	},
+}
 
-var getAgentTool = mcp.NewTool("s1_get_agent",
-	mcp.WithDescription("Get a specific SentinelOne agent by ID"),
-	mcp.WithString("agentId",
-		mcp.Required(),
-		mcp.Description("The agent ID to retrieve"),
-	),
-)
+var getAgentTool = ToolDef{
+	Name:        "s1_get_agent",
+	Description: "Get a specific SentinelOne agent by ID",
+	InputSchema: map[string]any{
+		"type":     "object",
+		"required": []string{"agentId"},
+		"properties": map[string]any{
+			"agentId": map[string]any{
+				"type":        "string",
+				"description": "The agent ID to retrieve",
+			},
+		},
+	},
+}
 
-var isolateAgentTool = mcp.NewTool("s1_isolate_agent",
-	mcp.WithDescription("Network isolate an agent (disconnect from network while maintaining S1 communication)"),
-	mcp.WithString("agentId",
-		mcp.Required(),
-		mcp.Description("The agent ID to network isolate"),
-	),
-)
+var isolateAgentTool = ToolDef{
+	Name:        "s1_isolate_agent",
+	Description: "Network isolate an agent (disconnect from network while maintaining S1 communication)",
+	InputSchema: map[string]any{
+		"type":     "object",
+		"required": []string{"agentId"},
+		"properties": map[string]any{
+			"agentId": map[string]any{
+				"type":        "string",
+				"description": "The agent ID to network isolate",
+			},
+		},
+	},
+}
 
-var reconnectAgentTool = mcp.NewTool("s1_reconnect_agent",
-	mcp.WithDescription("Remove network isolation from an agent"),
-	mcp.WithString("agentId",
-		mcp.Required(),
-		mcp.Description("The agent ID to reconnect"),
-	),
-)
+var reconnectAgentTool = ToolDef{
+	Name:        "s1_reconnect_agent",
+	Description: "Remove network isolation from an agent",
+	InputSchema: map[string]any{
+		"type":     "object",
+		"required": []string{"agentId"},
+		"properties": map[string]any{
+			"agentId": map[string]any{
+				"type":        "string",
+				"description": "The agent ID to reconnect",
+			},
+		},
+	},
+}
 
 func summarizeAgent(a map[string]any) string {
 	name := fallback(getStr(a, "computerName"), "Unknown")
@@ -84,11 +118,22 @@ func summarizeAgent(a map[string]any) string {
 		name, osInfo, status, infected, lastActive, id, user, ip)
 }
 
-func handleListAgents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	countBy := req.GetString("countBy", "")
-	limit := int(req.GetFloat("limit", 50))
-	if limit < 1 || limit > 200 {
-		limit = 50
+func handleListAgents(ctx context.Context, args json.RawMessage) ToolResult {
+	var p struct {
+		ComputerName    string   `json:"computerName"`
+		Limit           int      `json:"limit"`
+		OsTypes         []string `json:"osTypes"`
+		IsActive        *bool    `json:"isActive"`
+		IsInfected      *bool    `json:"isInfected"`
+		NetworkStatuses []string `json:"networkStatuses"`
+		CountBy         string   `json:"countBy"`
+	}
+	p.Limit = 50
+	if len(args) > 0 {
+		json.Unmarshal(args, &p)
+	}
+	if p.Limit < 1 || p.Limit > 200 {
+		p.Limit = 50
 	}
 
 	q := url.Values{}
@@ -96,40 +141,37 @@ func handleListAgents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 	q.Set("sortBy", "updatedAt")
 	q.Set("sortOrder", "desc")
 
-	if v := req.GetString("computerName", ""); v != "" {
-		q.Set("computerName__contains", v)
+	if p.ComputerName != "" {
+		q.Set("computerName__contains", p.ComputerName)
 	}
-	if v := req.GetStringSlice("osTypes", nil); len(v) > 0 {
-		q.Set("osTypes", strings.Join(v, ","))
+	if len(p.OsTypes) > 0 {
+		q.Set("osTypes", strings.Join(p.OsTypes, ","))
 	}
-	if v := req.GetStringSlice("networkStatuses", nil); len(v) > 0 {
-		q.Set("networkStatuses", strings.Join(v, ","))
+	if len(p.NetworkStatuses) > 0 {
+		q.Set("networkStatuses", strings.Join(p.NetworkStatuses, ","))
 	}
-
-	// Boolean filters: only set when explicitly provided
-	args := req.GetArguments()
-	if v, ok := args["isActive"].(bool); ok {
-		q.Set("isActive", strconv.FormatBool(v))
+	if p.IsActive != nil {
+		q.Set("isActive", strconv.FormatBool(*p.IsActive))
 	}
-	if v, ok := args["isInfected"].(bool); ok {
-		q.Set("isInfected", strconv.FormatBool(v))
+	if p.IsInfected != nil {
+		q.Set("isInfected", strconv.FormatBool(*p.IsInfected))
 	}
 
 	// When countBy is set, fetch all agents (no limit)
-	fetchAll := countBy != ""
+	fetchAll := p.CountBy != ""
 
 	totalItems := 0
 	var allAgents []map[string]any
 	for {
 		result, err := client.ListAgents(ctx, q)
 		if err != nil {
-			return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+			return toolError(fmt.Sprintf("Error: %v", err))
 		}
 		if result.Pagination != nil && totalItems == 0 {
 			totalItems = result.Pagination.TotalItems
 		}
 		allAgents = append(allAgents, result.Data...)
-		if (!fetchAll && len(allAgents) >= limit) || result.Pagination == nil || result.Pagination.NextCursor == "" {
+		if (!fetchAll && len(allAgents) >= p.Limit) || result.Pagination == nil || result.Pagination.NextCursor == "" {
 			break
 		}
 		q.Set("cursor", result.Pagination.NextCursor)
@@ -137,15 +179,15 @@ func handleListAgents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 
 	// countBy mode: group all agents by a field and return counts
 	if fetchAll {
-		return handleCountBy(countBy, allAgents, totalItems)
+		return handleCountBy(p.CountBy, allAgents, totalItems)
 	}
 
-	if len(allAgents) > limit {
-		allAgents = allAgents[:limit]
+	if len(allAgents) > p.Limit {
+		allAgents = allAgents[:p.Limit]
 	}
 
 	if len(allAgents) == 0 {
-		return mcp.NewToolResultText(fmt.Sprintf("%d agents. None matched filters.", totalItems)), nil
+		return toolText(fmt.Sprintf("%d agents. None matched filters.", totalItems))
 	}
 
 	lines := make([]string, len(allAgents))
@@ -153,8 +195,7 @@ func handleListAgents(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallTo
 		lines[i] = summarizeAgent(a)
 	}
 
-	text := fmt.Sprintf("%d agents. Showing %d:\n\n%s", totalItems, len(allAgents), strings.Join(lines, "\n\n"))
-	return mcp.NewToolResultText(text), nil
+	return toolText(fmt.Sprintf("%d agents. Showing %d:\n\n%s", totalItems, len(allAgents), strings.Join(lines, "\n\n")))
 }
 
 // countByFields maps friendly names to S1 agent JSON fields.
@@ -165,11 +206,11 @@ var countByFields = map[string]string{
 	"group": "groupName",
 }
 
-func handleCountBy(field string, agents []map[string]any, totalItems int) (*mcp.CallToolResult, error) {
+func handleCountBy(field string, agents []map[string]any, totalItems int) ToolResult {
 	apiField, ok := countByFields[field]
 	if !ok {
 		valid := slices.Sorted(maps.Keys(countByFields))
-		return mcp.NewToolResultError(fmt.Sprintf("Invalid countBy field %q. Valid: %s", field, strings.Join(valid, ", "))), nil
+		return toolError(fmt.Sprintf("Invalid countBy field %q. Valid: %s", field, strings.Join(valid, ", ")))
 	}
 
 	counts := map[string]int{}
@@ -196,23 +237,27 @@ func handleCountBy(field string, agents []map[string]any, totalItems int) (*mcp.
 		lines[i] = fmt.Sprintf("  %s: %d", s.Key, s.Count)
 	}
 
-	text := fmt.Sprintf("%d agents, %d unique %s values:\n\n%s", totalItems, len(counts), field, strings.Join(lines, "\n"))
-	return mcp.NewToolResultText(text), nil
+	return toolText(fmt.Sprintf("%d agents, %d unique %s values:\n\n%s", totalItems, len(counts), field, strings.Join(lines, "\n")))
 }
 
-func handleGetAgent(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	agentID, err := req.RequireString("agentId")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func handleGetAgent(ctx context.Context, args json.RawMessage) ToolResult {
+	var p struct {
+		AgentID string `json:"agentId"`
+	}
+	if len(args) > 0 {
+		json.Unmarshal(args, &p)
+	}
+	if p.AgentID == "" {
+		return toolError("agentId is required")
 	}
 
-	result, err := client.GetAgent(ctx, agentID)
+	result, err := client.GetAgent(ctx, p.AgentID)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+		return toolError(fmt.Sprintf("Error: %v", err))
 	}
 
 	if len(result.Data) == 0 {
-		return mcp.NewToolResultError(fmt.Sprintf("Agent %s not found", agentID)), nil
+		return toolError(fmt.Sprintf("Agent %s not found", p.AgentID))
 	}
 
 	a := result.Data[0]
@@ -260,37 +305,43 @@ Agent Version: %s`,
 		fallback(getStr(a, "agentVersion"), "N/A"),
 	)
 
-	return mcp.NewToolResultText(text), nil
+	return toolText(text)
 }
 
-func handleIsolateAgent(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	agentID, err := req.RequireString("agentId")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func handleIsolateAgent(ctx context.Context, args json.RawMessage) ToolResult {
+	var p struct {
+		AgentID string `json:"agentId"`
+	}
+	if len(args) > 0 {
+		json.Unmarshal(args, &p)
+	}
+	if p.AgentID == "" {
+		return toolError("agentId is required")
 	}
 
-	affected, err := client.IsolateAgent(ctx, agentID)
+	affected, err := client.IsolateAgent(ctx, p.AgentID)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+		return toolError(fmt.Sprintf("Error: %v", err))
 	}
 
-	return mcp.NewToolResultText(
-		fmt.Sprintf("Done: Agent %s isolated. Affected: %d", agentID, affected),
-	), nil
+	return toolText(fmt.Sprintf("Done: Agent %s isolated. Affected: %d", p.AgentID, affected))
 }
 
-func handleReconnectAgent(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	agentID, err := req.RequireString("agentId")
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
+func handleReconnectAgent(ctx context.Context, args json.RawMessage) ToolResult {
+	var p struct {
+		AgentID string `json:"agentId"`
+	}
+	if len(args) > 0 {
+		json.Unmarshal(args, &p)
+	}
+	if p.AgentID == "" {
+		return toolError("agentId is required")
 	}
 
-	affected, err := client.ReconnectAgent(ctx, agentID)
+	affected, err := client.ReconnectAgent(ctx, p.AgentID)
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Error: %v", err)), nil
+		return toolError(fmt.Sprintf("Error: %v", err))
 	}
 
-	return mcp.NewToolResultText(
-		fmt.Sprintf("Done: Agent %s reconnected. Affected: %d", agentID, affected),
-	), nil
+	return toolText(fmt.Sprintf("Done: Agent %s reconnected. Affected: %d", p.AgentID, affected))
 }
