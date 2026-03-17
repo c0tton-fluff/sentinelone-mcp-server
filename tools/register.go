@@ -12,6 +12,8 @@ func AllTools() []ToolDef {
 		listThreatsTool,
 		getThreatTool,
 		mitigateThreatTool,
+		setAnalystVerdictTool,
+		setIncidentStatusTool,
 		listAgentsTool,
 		getAgentTool,
 		isolateAgentTool,
@@ -33,6 +35,10 @@ func DispatchTool(ctx context.Context, name string, args json.RawMessage) ToolRe
 		return handleGetThreat(ctx, args)
 	case "s1_mitigate_threat":
 		return handleMitigateThreat(ctx, args)
+	case "s1_set_analyst_verdict":
+		return handleSetAnalystVerdict(ctx, args)
+	case "s1_set_incident_status":
+		return handleSetIncidentStatus(ctx, args)
 	case "s1_list_agents":
 		return handleListAgents(ctx, args)
 	case "s1_get_agent":

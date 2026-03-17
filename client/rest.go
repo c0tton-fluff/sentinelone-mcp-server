@@ -158,6 +158,26 @@ func doFilterPost(ctx context.Context, endpoint string, ids []string) (int, erro
 	return resp.Data.Affected, nil
 }
 
+func doDataFilterPost(ctx context.Context, endpoint string, ids []string, data map[string]any) (int, error) {
+	body := map[string]any{
+		"data":   data,
+		"filter": map[string]any{"ids": ids},
+	}
+	raw, err := doRequest(ctx, "POST", endpoint, body)
+	if err != nil {
+		return 0, err
+	}
+	var resp struct {
+		Data struct {
+			Affected int `json:"affected"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return 0, fmt.Errorf("parse response: %w", err)
+	}
+	return resp.Data.Affected, nil
+}
+
 // -- Threats --
 
 func ListThreats(ctx context.Context, q url.Values) (*PaginatedResponse, error) {
@@ -174,6 +194,20 @@ func GetThreat(ctx context.Context, id string) (*PaginatedResponse, error) {
 
 func MitigateThreat(ctx context.Context, id, action string) (int, error) {
 	return doFilterPost(ctx, "/threats/mitigate/"+url.PathEscape(action), []string{id})
+}
+
+func SetAnalystVerdict(ctx context.Context, id, verdict string) (int, error) {
+	return doDataFilterPost(ctx, "/threats/analyst-verdict", []string{id}, map[string]any{
+		"analystVerdict": verdict,
+	})
+}
+
+func SetIncidentStatus(ctx context.Context, id, status, verdict string) (int, error) {
+	data := map[string]any{"incidentStatus": status}
+	if verdict != "" {
+		data["analystVerdict"] = verdict
+	}
+	return doDataFilterPost(ctx, "/threats/incident", []string{id}, data)
 }
 
 func GetThreatTimeline(ctx context.Context, threatID string, limit int) (*PaginatedResponse, error) {
