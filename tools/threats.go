@@ -77,6 +77,51 @@ var mitigateThreatTool = ToolDef{
 	},
 }
 
+var setAnalystVerdictTool = ToolDef{
+	Name:        "s1_set_analyst_verdict",
+	Description: "Set the analyst verdict on a threat: true_positive, false_positive, suspicious, undefined",
+	InputSchema: map[string]any{
+		"type":     "object",
+		"required": []string{"threatId", "verdict"},
+		"properties": map[string]any{
+			"threatId": map[string]any{
+				"type":        "string",
+				"description": "The threat ID",
+			},
+			"verdict": map[string]any{
+				"type":        "string",
+				"description": "Analyst verdict: true_positive, false_positive, suspicious, undefined",
+				"enum":        []string{"true_positive", "false_positive", "suspicious", "undefined"},
+			},
+		},
+	},
+}
+
+var setIncidentStatusTool = ToolDef{
+	Name:        "s1_set_incident_status",
+	Description: "Set the incident status on a threat. Optionally set the analyst verdict at the same time.",
+	InputSchema: map[string]any{
+		"type":     "object",
+		"required": []string{"threatId", "status"},
+		"properties": map[string]any{
+			"threatId": map[string]any{
+				"type":        "string",
+				"description": "The threat ID",
+			},
+			"status": map[string]any{
+				"type":        "string",
+				"description": "Incident status: unresolved, in_progress, resolved",
+				"enum":        []string{"unresolved", "in_progress", "resolved"},
+			},
+			"verdict": map[string]any{
+				"type":        "string",
+				"description": "Optional: also set analyst verdict in the same call",
+				"enum":        []string{"true_positive", "false_positive", "suspicious", "undefined"},
+			},
+		},
+	},
+}
+
 func summarizeThreat(t map[string]any) string {
 	computer := fallback(getStr(t, "agentRealtimeInfo", "agentComputerName"), "Unknown")
 	threat := fallback(getStr(t, "threatInfo", "threatName"), "Unknown")
@@ -242,4 +287,56 @@ func handleMitigateThreat(ctx context.Context, args json.RawMessage) ToolResult 
 	}
 
 	return toolText(fmt.Sprintf("Done: %s applied to threat %s. Affected: %d", p.Action, p.ThreatID, affected))
+}
+
+func handleSetAnalystVerdict(ctx context.Context, args json.RawMessage) ToolResult {
+	var p struct {
+		ThreatID string `json:"threatId"`
+		Verdict  string `json:"verdict"`
+	}
+	if len(args) > 0 {
+		json.Unmarshal(args, &p)
+	}
+	if p.ThreatID == "" {
+		return toolError("threatId is required")
+	}
+	if p.Verdict == "" {
+		return toolError("verdict is required")
+	}
+
+	affected, err := client.SetAnalystVerdict(ctx, p.ThreatID, p.Verdict)
+	if err != nil {
+		return toolError(fmt.Sprintf("Error: %v", err))
+	}
+
+	return toolText(fmt.Sprintf("Done: analyst verdict set to %s on threat %s. Affected: %d", p.Verdict, p.ThreatID, affected))
+}
+
+func handleSetIncidentStatus(ctx context.Context, args json.RawMessage) ToolResult {
+	var p struct {
+		ThreatID string `json:"threatId"`
+		Status   string `json:"status"`
+		Verdict  string `json:"verdict"`
+	}
+	if len(args) > 0 {
+		json.Unmarshal(args, &p)
+	}
+	if p.ThreatID == "" {
+		return toolError("threatId is required")
+	}
+	if p.Status == "" {
+		return toolError("status is required")
+	}
+
+	affected, err := client.SetIncidentStatus(ctx, p.ThreatID, p.Status, p.Verdict)
+	if err != nil {
+		return toolError(fmt.Sprintf("Error: %v", err))
+	}
+
+	msg := fmt.Sprintf("Done: incident status set to %s on threat %s.", p.Status, p.ThreatID)
+	if p.Verdict != "" {
+		msg += fmt.Sprintf(" Analyst verdict set to %s.", p.Verdict)
+	}
+	msg += fmt.Sprintf(" Affected: %d", affected)
+	return toolText(msg)
 }

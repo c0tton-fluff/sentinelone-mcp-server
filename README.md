@@ -8,7 +8,7 @@ MCP server for [SentinelOne](https://www.sentinelone.com/) integration. Enables 
 
 ## Features
 
-- **Threat management** - List, inspect, and mitigate threats (kill, quarantine, un-quarantine, remediate, rollback)
+- **Threat management** - List, inspect, mitigate, and triage threats (verdict, status, kill, quarantine, remediate)
 - **Threat investigation** - Full investigation in one call: threat details, correlated alerts, and timeline
 - **Agent operations** - List agents, get details, group counts, network isolate/reconnect endpoints
 - **Unified alerts** - Query alerts via GraphQL with severity, verdict, and storyline filters
@@ -73,6 +73,8 @@ Add to `~/.mcp.json`:
 | `s1_get_threat` | Get threat details including hashes, file path, and storyline |
 | `s1_mitigate_threat` | Kill, quarantine, un-quarantine, remediate, or rollback a threat |
 | `s1_investigate_threat` | Full investigation: threat details, correlated alerts, and timeline |
+| `s1_set_analyst_verdict` | Set analyst verdict: true_positive, false_positive, suspicious, undefined |
+| `s1_set_incident_status` | Set incident status (with optional verdict in one call) |
 
 ### Agents
 
@@ -129,6 +131,19 @@ Add to `~/.mcp.json`:
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `threatId` | string | **Required.** The threat ID to investigate |
+
+### s1_set_analyst_verdict
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `threatId` | string | **Required.** The threat ID |
+| `verdict` | string | **Required.** true_positive, false_positive, suspicious, undefined |
+
+### s1_set_incident_status
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `threatId` | string | **Required.** The threat ID |
+| `status` | string | **Required.** unresolved, in_progress, resolved |
+| `verdict` | string | Optional: also set analyst verdict in the same call |
 
 ### s1_list_agents
 | Parameter | Type | Description |

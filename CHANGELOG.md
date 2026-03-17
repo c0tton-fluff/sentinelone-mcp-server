@@ -8,6 +8,8 @@ All notable changes to this project will be documented in this file.
 - Hash verdict lookup via `GET /hashes/{hash}/verdict` — `s1_hash_reputation` now returns instant S1 verdict before DV fleet hunt
 - Threat timeline via `GET /threats/{id}/timeline` — `s1_investigate_threat` uses dedicated API instead of DV queries (faster, no rate-limit impact)
 - `un-quarantine` mitigation action on `s1_mitigate_threat`
+- `s1_set_analyst_verdict` tool — set analyst verdict on a threat (true_positive, false_positive, suspicious, undefined)
+- `s1_set_incident_status` tool — set incident status on a threat (unresolved, in_progress, resolved) with optional verdict in one call
 
 ### Fixed
 - Agent `infected` filter was sent as `isInfected` (silently ignored by S1 API)
