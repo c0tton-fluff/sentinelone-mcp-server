@@ -452,14 +452,14 @@ func TestSummarizeThreat_Minimal(t *testing.T) {
 
 func TestSummarizeAgent_Full(t *testing.T) {
 	agent := map[string]any{
-		"id":                    "agent-456",
-		"computerName":          "ws01",
-		"osName":                "Windows 11",
-		"networkStatus":         "connected",
-		"infected":              false,
-		"lastActiveDate":        time.Now().Add(-30 * time.Minute).Format(time.RFC3339),
-		"lastLoggedInUserName":  "jdoe",
-		"externalIp":            "203.0.113.5",
+		"id":                   "agent-456",
+		"computerName":         "ws01",
+		"osName":               "Windows 11",
+		"networkStatus":        "connected",
+		"infected":             false,
+		"lastActiveDate":       time.Now().Add(-30 * time.Minute).Format(time.RFC3339),
+		"lastLoggedInUserName": "jdoe",
+		"externalIp":           "203.0.113.5",
 	}
 	got := summarizeAgent(agent)
 	for _, want := range []string{"ws01", "Windows 11", "connected", "clean", "agent-456", "jdoe", "203.0.113.5"} {
