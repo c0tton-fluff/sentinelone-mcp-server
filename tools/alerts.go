@@ -59,8 +59,51 @@ func summarizeAlert(a map[string]any) string {
 		timeStr = formatTimeAgo(d)
 	}
 
+	// Process info
+	var processLine string
+	if proc, ok := a["process"].(map[string]any); ok {
+		cmdLine := getStr(proc, "cmdLine")
+		parentName := getStr(proc, "parentName")
+		var fileName, filePath string
+		if f, ok := proc["file"].(map[string]any); ok {
+			fileName = getStr(f, "name")
+			filePath = getStr(f, "path")
+		}
+		if cmdLine != "" || fileName != "" {
+			processLine = "\n  Process: " + fallback(fileName, "N/A")
+			if filePath != "" {
+				processLine += " (" + truncatePath(filePath, 60) + ")"
+			}
+			if cmdLine != "" {
+				processLine += "\n  Cmd: " + cmdLine
+			}
+			if parentName != "" {
+				processLine += "\n  Parent: " + parentName
+			}
+		}
+	}
+
+	// Asset/endpoint info
+	var assetLine string
+	if assets, ok := a["assets"].([]any); ok && len(assets) > 0 {
+		if asset, ok := assets[0].(map[string]any); ok {
+			assetName := getStr(asset, "name")
+			user := getStr(asset, "lastLoggedInUser")
+			osType := getStr(asset, "osType")
+			if assetName != "" {
+				assetLine = "\n  Endpoint: " + assetName
+				if user != "" {
+					assetLine += " | User: " + user
+				}
+				if osType != "" {
+					assetLine += " | OS: " + osType
+				}
+			}
+		}
+	}
+
 	return fmt.Sprintf("- %s | %s | %s | %s\n  ID: %s | Verdict: %s\n  Classification: %s | Confidence: %s\n  Storyline: %s",
-		name, severity, status, timeStr, id, verdict, classification, confidence, storylineID)
+		name, severity, status, timeStr, id, verdict, classification, confidence, storylineID) + assetLine + processLine
 }
 
 func handleListAlerts(ctx context.Context, args json.RawMessage) ToolResult {

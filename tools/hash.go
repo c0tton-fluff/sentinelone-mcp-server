@@ -32,21 +32,23 @@ func summarizeHashEvent(e map[string]any) string {
 	timeStr := "unknown"
 	if d := getStr(e, "eventTime"); d != "" {
 		timeStr = formatTimeAgo(d)
+	} else if d := getStr(e, "createdAt"); d != "" {
+		timeStr = formatTimeAgo(d)
 	}
 	eventType := fallback(getStr(e, "eventType"), "Unknown")
 	process := fallback(getStr(e, "processName"), "N/A")
 	agent := fallback(getStr(e, "agentName"), "Unknown")
 
-	user := getStr(e, "processUser")
+	user := getStr(e, "processUserName")
 	if user == "" {
 		user = getStr(e, "user")
 	}
 
 	var details string
-	if fp := getStr(e, "filePath"); fp != "" {
+	if fp := getStr(e, "fileFullName"); fp != "" {
 		details += " | " + truncatePath(fp, 60)
 	}
-	if cmd := getStr(e, "processCommandLine"); cmd != "" {
+	if cmd := getStr(e, "processCmd"); cmd != "" {
 		if len(cmd) > 80 {
 			cmd = cmd[:80]
 		}

@@ -119,6 +119,8 @@ func summarizeEvent(e map[string]any) string {
 	timeStr := "unknown"
 	if d := getStr(e, "eventTime"); d != "" {
 		timeStr = formatTimeAgo(d)
+	} else if d := getStr(e, "createdAt"); d != "" {
+		timeStr = formatTimeAgo(d)
 	}
 	eventType := fallback(getStr(e, "eventType"), "Unknown")
 	process := fallback(getStr(e, "processName"), "N/A")
@@ -137,7 +139,7 @@ func summarizeEvent(e map[string]any) string {
 	} else if dstIP != "" {
 		details += fmt.Sprintf(" -> %s:%s", dstIP, dstPort)
 	}
-	if fp := getStr(e, "filePath"); fp != "" {
+	if fp := getStr(e, "fileFullName"); fp != "" {
 		details += " | " + truncatePath(fp, 60)
 	}
 	if dns := getStr(e, "dnsRequest"); dns != "" {
@@ -145,6 +147,9 @@ func summarizeEvent(e map[string]any) string {
 	}
 	if user := getStr(e, "user"); user != "" {
 		details += " | User: " + user
+	}
+	if cmd := getStr(e, "processCmd"); cmd != "" {
+		details += " | Cmd: " + truncatePath(cmd, 120)
 	}
 
 	return fmt.Sprintf("- %s | %s | %s | %s%s", eventType, agent, process, timeStr, details)
