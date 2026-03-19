@@ -11,7 +11,7 @@ MCP server for [SentinelOne](https://www.sentinelone.com/) integration. Enables 
 - **Threat management** - List, inspect, mitigate, and triage threats (verdict, status, kill, quarantine, remediate)
 - **Threat investigation** - Full investigation in one call: threat details, correlated alerts, and timeline
 - **Agent operations** - List agents, get details, group counts, network isolate/reconnect endpoints
-- **Unified alerts** - Query alerts via GraphQL with severity, verdict, and storyline filters
+- **Unified alerts** - Query alerts via GraphQL with endpoint, process, command line, severity, and verdict context
 - **Hash intelligence** - Instant hash verdict plus SHA1/SHA256 fleet-wide hunting via Deep Visibility
 - **Deep Visibility** - Run threat hunting queries with automatic polling and pagination
 - **Error sanitization** - API keys are redacted from all error messages
@@ -89,7 +89,7 @@ Add to `~/.mcp.json`:
 
 | Tool | Description |
 |------|-------------|
-| `s1_list_alerts` | Query unified alerts via GraphQL with severity and verdict filters |
+| `s1_list_alerts` | Query unified alerts via GraphQL — includes endpoint, process, command line, severity, and verdict |
 
 ### Intelligence
 
@@ -175,6 +175,8 @@ Add to `~/.mcp.json`:
 | `incidentStatus` | string | Filter: NEW, IN_PROGRESS, RESOLVED (case-insensitive). Aliases: unresolved, open |
 | `siteIds` | string[] | Filter by site IDs |
 | `storylineId` | string | Filter by storyline ID (correlate with threat) |
+
+Each alert includes: endpoint name/user/OS, process name/path/cmdLine/parent, severity, verdict, classification, and storyline ID.
 
 ### s1_hash_reputation
 | Parameter | Type | Description |
