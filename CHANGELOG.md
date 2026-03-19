@@ -11,6 +11,11 @@ All notable changes to this project will be documented in this file.
 - `s1_set_analyst_verdict` tool — set analyst verdict on a threat (true_positive, false_positive, suspicious, undefined)
 - `s1_set_incident_status` tool — set incident status on a threat (unresolved, in_progress, resolved) with optional verdict in one call
 
+### Improved
+- Alert summaries now include endpoint (name, user, OS) and process (name, path, cmdLine, parent) from GraphQL
+- DV event summaries: fix `processCmd`, `fileFullName`, `processUserName` field names (were wrong per Swagger)
+- DV event summaries: add `processCmd` command line and `createdAt` time fallback
+
 ### Fixed
 - Agent `infected` filter was sent as `isInfected` (silently ignored by S1 API)
 - DV query status polling: handle all terminal states (`QUERY_CANCELLED`, `FAILED_CLIENT`, `ERROR`, `TIMED_OUT`, `QUERY_EXPIRED`)

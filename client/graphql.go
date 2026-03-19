@@ -98,6 +98,16 @@ func QueryAlerts(
         status
         storylineId
         detectedAt
+        process {
+          cmdLine
+          file { name path }
+          parentName
+        }
+        assets {
+          name
+          lastLoggedInUser
+          osType
+        }
       }
     }
     pageInfo {
