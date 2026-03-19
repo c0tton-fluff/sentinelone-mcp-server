@@ -267,6 +267,28 @@ func validateDVQuery(query string) (string, string, error) {
 	return query, warning, nil
 }
 
+// pollDVQuery polls a DV query until it reaches a terminal state or
+// times out after 30 seconds. Returns the final status or an error.
+func pollDVQuery(
+	ctx context.Context, queryID string,
+) (*client.DVStatus, error) {
+	for range 30 {
+		time.Sleep(1 * time.Second)
+		status, err := client.GetDVQueryStatus(ctx, queryID)
+		if err != nil {
+			return nil, err
+		}
+		switch status.Status {
+		case "RUNNING", "PROCESS_RUNNING", "EVENTS_RUNNING":
+			// still running
+		default:
+			return status, nil
+		}
+	}
+	// Final check after timeout.
+	return client.GetDVQueryStatus(ctx, queryID)
+}
+
 func handleDVQuery(ctx context.Context, args json.RawMessage) ToolResult {
 	var p struct {
 		Query      string   `json:"query"`
@@ -276,7 +298,9 @@ func handleDVQuery(ctx context.Context, args json.RawMessage) ToolResult {
 		AccountIDs []string `json:"accountIds"`
 	}
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.Query == "" {
 		return toolError("query is required")
@@ -298,22 +322,10 @@ func handleDVQuery(ctx context.Context, args json.RawMessage) ToolResult {
 		return toolError(fmt.Sprintf("Error running Deep Visibility query: %v", err))
 	}
 
-	// Poll for completion — only break on known terminal states.
-	var status *client.DVStatus
-	for range 30 {
-		time.Sleep(1 * time.Second)
-		status, err = client.GetDVQueryStatus(ctx, queryID)
-		if err != nil {
-			return toolError(fmt.Sprintf("Error running Deep Visibility query: %v", err))
-		}
-		switch status.Status {
-		case "RUNNING", "PROCESS_RUNNING", "EVENTS_RUNNING":
-			// still running — keep polling
-		default:
-			goto done
-		}
+	status, err := pollDVQuery(ctx, queryID)
+	if err != nil {
+		return toolError(fmt.Sprintf("Error running Deep Visibility query: %v", err))
 	}
-done:
 
 	switch status.Status {
 	case "FAILED", "FAILED_CLIENT", "ERROR":
@@ -353,7 +365,9 @@ func handleDVGetEvents(ctx context.Context, args json.RawMessage) ToolResult {
 	}
 	p.Limit = 100
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.QueryID == "" {
 		return toolError("queryId is required")

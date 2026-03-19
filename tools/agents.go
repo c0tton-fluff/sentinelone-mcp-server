@@ -130,14 +130,16 @@ func handleListAgents(ctx context.Context, args json.RawMessage) ToolResult {
 	}
 	p.Limit = 50
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.Limit < 1 || p.Limit > 200 {
 		p.Limit = 50
 	}
 
 	q := url.Values{}
-	q.Set("limit", "50")
+	q.Set("limit", strconv.Itoa(min(p.Limit, 50)))
 	q.Set("sortBy", "updatedAt")
 	q.Set("sortOrder", "desc")
 
@@ -245,7 +247,9 @@ func handleGetAgent(ctx context.Context, args json.RawMessage) ToolResult {
 		AgentID string `json:"agentId"`
 	}
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.AgentID == "" {
 		return toolError("agentId is required")
@@ -313,7 +317,9 @@ func handleIsolateAgent(ctx context.Context, args json.RawMessage) ToolResult {
 		AgentID string `json:"agentId"`
 	}
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.AgentID == "" {
 		return toolError("agentId is required")
@@ -332,7 +338,9 @@ func handleReconnectAgent(ctx context.Context, args json.RawMessage) ToolResult 
 		AgentID string `json:"agentId"`
 	}
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.AgentID == "" {
 		return toolError("agentId is required")

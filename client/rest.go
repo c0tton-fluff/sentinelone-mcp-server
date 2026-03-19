@@ -71,9 +71,8 @@ func doRequest(ctx context.Context, method, endpoint string, body any) ([]byte, 
 		if err != nil {
 			return nil, fmt.Errorf("%s", sanitize(err.Error()))
 		}
-
 		data, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if err != nil {
 			return nil, fmt.Errorf("read response: %w", err)
 		}

@@ -63,7 +63,9 @@ func handleHashReputation(ctx context.Context, args json.RawMessage) ToolResult 
 		Hash string `json:"hash"`
 	}
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.Hash == "" {
 		return toolError("hash is required")
@@ -109,22 +111,10 @@ func handleHashReputation(ctx context.Context, args json.RawMessage) ToolResult 
 		return toolError("DV query slot busy - another query is still processing. Try again shortly.")
 	}
 
-	// Poll for completion -- only break on known terminal states.
-	var status *client.DVStatus
-	for range 30 {
-		time.Sleep(1 * time.Second)
-		status, err = client.GetDVQueryStatus(ctx, queryID)
-		if err != nil {
-			return toolError(fmt.Sprintf("Error hunting hash: %v", err))
-		}
-		switch status.Status {
-		case "RUNNING", "PROCESS_RUNNING", "EVENTS_RUNNING":
-			// still running — keep polling
-		default:
-			goto pollDone
-		}
+	status, err := pollDVQuery(ctx, queryID)
+	if err != nil {
+		return toolError(fmt.Sprintf("Error hunting hash: %v", err))
 	}
-pollDone:
 
 	switch status.Status {
 	case "FAILED", "FAILED_CLIENT", "ERROR":

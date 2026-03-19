@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/c0tton-fluff/sentinelone-mcp-server/client"
@@ -150,14 +151,16 @@ func handleListThreats(ctx context.Context, args json.RawMessage) ToolResult {
 	}
 	p.Limit = 50
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.Limit < 1 || p.Limit > 200 {
 		p.Limit = 50
 	}
 
 	q := url.Values{}
-	q.Set("limit", "50")
+	q.Set("limit", strconv.Itoa(min(p.Limit, 50)))
 	q.Set("sortBy", "createdAt")
 	q.Set("sortOrder", "desc")
 
@@ -208,7 +211,9 @@ func handleGetThreat(ctx context.Context, args json.RawMessage) ToolResult {
 		ThreatID string `json:"threatId"`
 	}
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.ThreatID == "" {
 		return toolError("threatId is required")
@@ -272,7 +277,9 @@ func handleMitigateThreat(ctx context.Context, args json.RawMessage) ToolResult 
 		Action   string `json:"action"`
 	}
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.ThreatID == "" {
 		return toolError("threatId is required")
@@ -295,7 +302,9 @@ func handleSetAnalystVerdict(ctx context.Context, args json.RawMessage) ToolResu
 		Verdict  string `json:"verdict"`
 	}
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.ThreatID == "" {
 		return toolError("threatId is required")
@@ -319,7 +328,9 @@ func handleSetIncidentStatus(ctx context.Context, args json.RawMessage) ToolResu
 		Verdict  string `json:"verdict"`
 	}
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.ThreatID == "" {
 		return toolError("threatId is required")

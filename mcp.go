@@ -71,6 +71,13 @@ func HandleRequest(ctx context.Context, req JSONRPCRequest) *JSONRPCResponse {
 	case "notifications/initialized":
 		return nil
 
+	case "ping":
+		return &JSONRPCResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Result:  map[string]any{},
+		}
+
 	case "tools/list":
 		return &JSONRPCResponse{
 			JSONRPC: "2.0",

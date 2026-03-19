@@ -72,7 +72,7 @@ func summarizeAlert(a map[string]any) string {
 		if cmdLine != "" || fileName != "" {
 			processLine = "\n  Process: " + fallback(fileName, "N/A")
 			if filePath != "" {
-				processLine += " (" + truncatePath(filePath, 60) + ")"
+				processLine += " (" + filePath + ")"
 			}
 			if cmdLine != "" {
 				processLine += "\n  Cmd: " + cmdLine
@@ -117,7 +117,9 @@ func handleListAlerts(ctx context.Context, args json.RawMessage) ToolResult {
 	}
 	p.Limit = 50
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.Limit < 1 || p.Limit > 200 {
 		p.Limit = 50

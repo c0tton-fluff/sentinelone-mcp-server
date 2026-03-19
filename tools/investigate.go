@@ -31,7 +31,9 @@ func handleInvestigateThreat(ctx context.Context, args json.RawMessage) ToolResu
 		ThreatID string `json:"threatId"`
 	}
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.ThreatID == "" {
 		return toolError("threatId is required")
@@ -128,7 +130,7 @@ func summarizeTimelineEvent(e map[string]any) string {
 		line = fmt.Sprintf("- [%s] %s: %s", timeStr, activityType, primary)
 	}
 	if secondary != "" {
-		line += " — " + secondary
+		line += " -- " + secondary
 	}
 	return line
 }
