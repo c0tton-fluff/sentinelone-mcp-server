@@ -104,7 +104,11 @@ func handleHashReputation(ctx context.Context, args json.RawMessage) ToolResult 
 		if !strings.Contains(err.Error(), "409") || attempt == 5 {
 			return toolError(fmt.Sprintf("Error hunting hash: %v", err))
 		}
-		time.Sleep(3 * time.Second)
+		select {
+		case <-ctx.Done():
+			return toolError(fmt.Sprintf("Error hunting hash: %v", ctx.Err()))
+		case <-time.After(3 * time.Second):
+		}
 	}
 
 	if queryID == "" {
@@ -139,7 +143,11 @@ func handleHashReputation(ctx context.Context, args json.RawMessage) ToolResult 
 		if !strings.Contains(err.Error(), "409") || attempt == 4 {
 			return toolError(fmt.Sprintf("Error hunting hash: %v", err))
 		}
-		time.Sleep(2 * time.Second)
+		select {
+		case <-ctx.Done():
+			return toolError(fmt.Sprintf("Error hunting hash: %v", ctx.Err()))
+		case <-time.After(2 * time.Second):
+		}
 	}
 
 	if events == nil {

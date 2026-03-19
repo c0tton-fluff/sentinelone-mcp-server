@@ -129,16 +129,15 @@ func handleListAlerts(ctx context.Context, args json.RawMessage) ToolResult {
 	var allAlerts []map[string]any
 	cursor := ""
 	for {
-		result, err := client.QueryAlerts(
-			ctx,
-			pageSize,
-			cursor,
-			p.Severity,
-			p.AnalystVerdict,
-			p.IncidentStatus,
-			p.StorylineID,
-			p.SiteIDs,
-		)
+		result, err := client.QueryAlerts(ctx, client.AlertQueryOpts{
+			Limit:          pageSize,
+			Cursor:         cursor,
+			Severity:       p.Severity,
+			AnalystVerdict: p.AnalystVerdict,
+			IncidentStatus: p.IncidentStatus,
+			StorylineID:    p.StorylineID,
+			SiteIDs:        p.SiteIDs,
+		})
 		if err != nil {
 			return toolError(fmt.Sprintf("Error listing alerts: %v", err))
 		}

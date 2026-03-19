@@ -46,42 +46,48 @@ func normalizeStatus(s string) string {
 	}
 }
 
-func QueryAlerts(
-	ctx context.Context,
-	limit int,
-	cursor, severity, analystVerdict, incidentStatus, storylineID string,
-	siteIDs []string,
-) (*AlertsResult, error) {
+// AlertQueryOpts holds optional filters for QueryAlerts.
+type AlertQueryOpts struct {
+	Limit          int
+	Cursor         string
+	Severity       string
+	AnalystVerdict string
+	IncidentStatus string
+	StorylineID    string
+	SiteIDs        []string
+}
+
+func QueryAlerts(ctx context.Context, opts AlertQueryOpts) (*AlertsResult, error) {
 	var filters []alertFilter
 
-	if severity != "" {
+	if opts.Severity != "" {
 		filters = append(filters, alertFilter{
 			FieldID:     "severity",
-			StringEqual: &stringEqualFilter{Value: strings.ToUpper(strings.TrimSpace(severity))},
+			StringEqual: &stringEqualFilter{Value: strings.ToUpper(strings.TrimSpace(opts.Severity))},
 		})
 	}
-	if analystVerdict != "" {
+	if opts.AnalystVerdict != "" {
 		filters = append(filters, alertFilter{
 			FieldID:     "analystVerdict",
-			StringEqual: &stringEqualFilter{Value: strings.ToUpper(strings.TrimSpace(analystVerdict))},
+			StringEqual: &stringEqualFilter{Value: strings.ToUpper(strings.TrimSpace(opts.AnalystVerdict))},
 		})
 	}
-	if incidentStatus != "" {
+	if opts.IncidentStatus != "" {
 		filters = append(filters, alertFilter{
 			FieldID:     "status",
-			StringEqual: &stringEqualFilter{Value: normalizeStatus(incidentStatus)},
+			StringEqual: &stringEqualFilter{Value: normalizeStatus(opts.IncidentStatus)},
 		})
 	}
-	if storylineID != "" {
+	if opts.StorylineID != "" {
 		filters = append(filters, alertFilter{
 			FieldID:     "storylineId",
-			StringEqual: &stringEqualFilter{Value: storylineID},
+			StringEqual: &stringEqualFilter{Value: opts.StorylineID},
 		})
 	}
-	if len(siteIDs) > 0 {
+	if len(opts.SiteIDs) > 0 {
 		filters = append(filters, alertFilter{
 			FieldID:  "siteId",
-			StringIn: &stringInFilter{Values: siteIDs},
+			StringIn: &stringInFilter{Values: opts.SiteIDs},
 		})
 	}
 
@@ -117,13 +123,14 @@ func QueryAlerts(
   }
 }`
 
+	limit := opts.Limit
 	if limit <= 0 {
 		limit = 20
 	}
 
 	variables := map[string]any{"first": limit}
-	if cursor != "" {
-		variables["after"] = cursor
+	if opts.Cursor != "" {
+		variables["after"] = opts.Cursor
 	}
 	if len(filters) > 0 {
 		variables["filters"] = filters

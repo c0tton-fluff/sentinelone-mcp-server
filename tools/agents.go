@@ -159,8 +159,9 @@ func handleListAgents(ctx context.Context, args json.RawMessage) ToolResult {
 		q.Set("infected", strconv.FormatBool(*p.IsInfected))
 	}
 
-	// When countBy is set, fetch all agents (no limit)
+	// When countBy is set, fetch all agents (capped at 10,000)
 	fetchAll := p.CountBy != ""
+	const maxFetchAll = 10_000
 
 	totalItems := 0
 	var allAgents []map[string]any
@@ -173,7 +174,11 @@ func handleListAgents(ctx context.Context, args json.RawMessage) ToolResult {
 			totalItems = result.Pagination.TotalItems
 		}
 		allAgents = append(allAgents, result.Data...)
-		if (!fetchAll && len(allAgents) >= p.Limit) || result.Pagination == nil || result.Pagination.NextCursor == "" {
+		atLimit := len(allAgents) >= p.Limit
+		if fetchAll {
+			atLimit = len(allAgents) >= maxFetchAll
+		}
+		if atLimit || result.Pagination == nil || result.Pagination.NextCursor == "" {
 			break
 		}
 		q.Set("cursor", result.Pagination.NextCursor)

@@ -273,7 +273,11 @@ func pollDVQuery(
 	ctx context.Context, queryID string,
 ) (*client.DVStatus, error) {
 	for range 30 {
-		time.Sleep(1 * time.Second)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(1 * time.Second):
+		}
 		status, err := client.GetDVQueryStatus(ctx, queryID)
 		if err != nil {
 			return nil, err
@@ -377,45 +381,40 @@ func handleDVGetEvents(ctx context.Context, args json.RawMessage) ToolResult {
 	}
 
 	// Wait for query to finish if still running.
-	for range 30 {
-		status, err := client.GetDVQueryStatus(ctx, p.QueryID)
-		if err != nil {
-			return toolError(fmt.Sprintf("Error getting Deep Visibility events: %v", err))
-		}
-		switch status.Status {
-		case "FINISHED":
-			goto ready
-		case "FAILED", "FAILED_CLIENT", "ERROR":
-			return toolError(fmt.Sprintf("Query %s failed: %s", p.QueryID, fallback(status.ResponseError, "Unknown error")))
-		case "QUERY_CANCELLED":
-			return toolError(fmt.Sprintf("Query %s was canceled", p.QueryID))
-		case "TIMED_OUT", "QUERY_EXPIRED":
-			return toolError(fmt.Sprintf("Query %s expired or timed out", p.QueryID))
-		case "RUNNING", "PROCESS_RUNNING", "EVENTS_RUNNING":
-			// still running — keep polling
-		default:
-			return toolError(fmt.Sprintf("Query %s unexpected status: %s", p.QueryID, status.Status))
-		}
-		time.Sleep(1 * time.Second)
+	status, err := pollDVQuery(ctx, p.QueryID)
+	if err != nil {
+		return toolError(fmt.Sprintf("Error getting Deep Visibility events: %v", err))
 	}
-	return toolText(fmt.Sprintf("Query %s is still running after 30 seconds. Try again later.", p.QueryID))
-ready:
+	switch status.Status {
+	case "FINISHED":
+		// continue to fetch events
+	case "FAILED", "FAILED_CLIENT", "ERROR":
+		return toolError(fmt.Sprintf("Query %s failed: %s", p.QueryID, fallback(status.ResponseError, "Unknown error")))
+	case "QUERY_CANCELLED":
+		return toolError(fmt.Sprintf("Query %s was canceled", p.QueryID))
+	case "TIMED_OUT", "QUERY_EXPIRED":
+		return toolError(fmt.Sprintf("Query %s expired or timed out", p.QueryID))
+	case "RUNNING", "PROCESS_RUNNING", "EVENTS_RUNNING":
+		return toolText(fmt.Sprintf("Query %s is still running after 30 seconds. Try again later.", p.QueryID))
+	default:
+		return toolError(fmt.Sprintf("Query %s unexpected status: %s", p.QueryID, status.Status))
+	}
 
 	// Fetch events, retrying on 409 (S1 race: status says FINISHED but events not yet available).
 	var result *client.PaginatedResponse
-	var err error
-	for range 5 {
+	for attempt := range 5 {
 		result, err = client.GetDVEvents(ctx, p.QueryID, p.Limit, "")
 		if err == nil {
 			break
 		}
-		if !strings.Contains(err.Error(), "409") {
+		if !strings.Contains(err.Error(), "409") || attempt == 4 {
 			return toolError(fmt.Sprintf("Error getting Deep Visibility events: %v", err))
 		}
-		time.Sleep(2 * time.Second)
-	}
-	if err != nil {
-		return toolError(fmt.Sprintf("Error getting Deep Visibility events: %v", err))
+		select {
+		case <-ctx.Done():
+			return toolError(fmt.Sprintf("Error getting Deep Visibility events: %v", ctx.Err()))
+		case <-time.After(2 * time.Second):
+		}
 	}
 
 	if len(result.Data) == 0 {

@@ -81,7 +81,10 @@ func handleInvestigateThreat(ctx context.Context, args json.RawMessage) ToolResu
 	if storylineID == "" {
 		sb.WriteString("\n---\nNo storyline ID available.")
 	} else {
-		alerts, alertErr := client.QueryAlerts(ctx, 20, "", "", "", "", storylineID, nil)
+		alerts, alertErr := client.QueryAlerts(ctx, client.AlertQueryOpts{
+			Limit:       20,
+			StorylineID: storylineID,
+		})
 		if alertErr != nil {
 			fmt.Fprintf(&sb, "\n---\nError: %v", alertErr)
 		} else if len(alerts.Alerts) == 0 {

@@ -81,10 +81,14 @@ func doRequest(ctx context.Context, method, endpoint string, body any) ([]byte, 
 			wait := backoff
 			if ra := resp.Header.Get("Retry-After"); ra != "" {
 				if secs, err := strconv.Atoi(ra); err == nil && secs > 0 {
-					wait = time.Duration(secs) * time.Second
+					wait = time.Duration(min(secs, 120)) * time.Second
 				}
 			}
-			time.Sleep(wait)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(wait):
+			}
 			backoff = min(backoff*2, 60*time.Second)
 			continue
 		}
