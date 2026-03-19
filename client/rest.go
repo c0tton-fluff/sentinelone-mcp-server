@@ -240,6 +240,59 @@ func ReconnectAgent(ctx context.Context, id string) (int, error) {
 	return doFilterPost(ctx, "/agents/actions/connect", []string{id})
 }
 
+// -- Alerts (REST) --
+
+// AlertFilter represents the filter object for cloud-detection alert bulk operations.
+type AlertFilter struct {
+	Query                string   `json:"query,omitempty"`
+	RuleNameContains     []string `json:"ruleName__contains,omitempty"`
+	AgentNameContains    []string `json:"origAgentName__contains,omitempty"`
+	IncidentStatus       []string `json:"incidentStatus,omitempty"`
+	AnalystVerdict       []string `json:"analystVerdict,omitempty"`
+	SiteIDs              []string `json:"siteIds,omitempty"`
+	IDs                  []string `json:"ids,omitempty"`
+}
+
+func SetAlertVerdict(ctx context.Context, filter AlertFilter, verdict string) (int, error) {
+	body := map[string]any{
+		"data":   map[string]any{"analystVerdict": verdict},
+		"filter": filter,
+	}
+	raw, err := doRequest(ctx, "POST", "/cloud-detection/alerts/analyst-verdict", body)
+	if err != nil {
+		return 0, err
+	}
+	var resp struct {
+		Data struct {
+			Affected int `json:"affected"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return 0, fmt.Errorf("parse response: %w", err)
+	}
+	return resp.Data.Affected, nil
+}
+
+func SetAlertStatus(ctx context.Context, filter AlertFilter, status string) (int, error) {
+	body := map[string]any{
+		"data":   map[string]any{"incidentStatus": status},
+		"filter": filter,
+	}
+	raw, err := doRequest(ctx, "POST", "/cloud-detection/alerts/incident", body)
+	if err != nil {
+		return 0, err
+	}
+	var resp struct {
+		Data struct {
+			Affected int `json:"affected"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return 0, fmt.Errorf("parse response: %w", err)
+	}
+	return resp.Data.Affected, nil
+}
+
 // -- Hashes --
 
 func GetHashVerdict(ctx context.Context, hash string) (string, error) {
