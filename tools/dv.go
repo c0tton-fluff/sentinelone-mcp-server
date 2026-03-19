@@ -149,7 +149,7 @@ func summarizeEvent(e map[string]any) string {
 		details += " | User: " + user
 	}
 	if cmd := getStr(e, "processCmd"); cmd != "" {
-		details += " | Cmd: " + truncatePath(cmd, 120)
+		details += " | Cmd: " + cmd
 	}
 
 	return fmt.Sprintf("- %s | %s | %s | %s%s", eventType, agent, process, timeStr, details)

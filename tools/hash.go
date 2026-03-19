@@ -49,10 +49,7 @@ func summarizeHashEvent(e map[string]any) string {
 		details += " | " + truncatePath(fp, 60)
 	}
 	if cmd := getStr(e, "processCmd"); cmd != "" {
-		if len(cmd) > 80 {
-			cmd = cmd[:80]
-		}
-		details += " | cmd: " + cmd
+		details += " | Cmd: " + cmd
 	}
 	if user != "" {
 		details += " | " + user
