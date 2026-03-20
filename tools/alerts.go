@@ -233,7 +233,9 @@ func handleSetAlertVerdict(ctx context.Context, args json.RawMessage) ToolResult
 		Verdict string `json:"verdict"`
 	}
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.Verdict == "" {
 		return toolError("verdict is required")
@@ -257,7 +259,9 @@ func handleSetAlertStatus(ctx context.Context, args json.RawMessage) ToolResult 
 		Verdict string `json:"verdict"`
 	}
 	if len(args) > 0 {
-		json.Unmarshal(args, &p)
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
 	}
 	if p.Status == "" {
 		return toolError("status is required")
@@ -280,7 +284,11 @@ func handleSetAlertStatus(ctx context.Context, args json.RawMessage) ToolResult 
 
 	affected, err := client.SetAlertStatus(ctx, filter, p.Status)
 	if err != nil {
-		return toolError(fmt.Sprintf("Error setting status: %v", err))
+		msg := fmt.Sprintf("Error setting status: %v", err)
+		if verdictMsg != "" {
+			msg += fmt.Sprintf(" (note: verdict was already applied:%s)", verdictMsg)
+		}
+		return toolError(msg)
 	}
 
 	return toolText(fmt.Sprintf("Done: incident status set to %s on %d alert(s).%s", p.Status, affected, verdictMsg))

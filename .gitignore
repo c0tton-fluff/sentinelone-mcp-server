@@ -1,6 +1,9 @@
 # Binary
 sentinelone-mcp-server
 
+# MCP config (contains local paths/secrets)
+.mcp.json
+
 # Environment files (contain secrets)
 .env
 .env.local
