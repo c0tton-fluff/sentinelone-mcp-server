@@ -19,6 +19,8 @@ func AllTools() []ToolDef {
 		isolateAgentTool,
 		reconnectAgentTool,
 		listAlertsTool,
+		setAlertVerdictTool,
+		setAlertStatusTool,
 		hashReputationTool,
 		dvQueryTool,
 		dvGetEventsTool,
@@ -49,6 +51,10 @@ func DispatchTool(ctx context.Context, name string, args json.RawMessage) ToolRe
 		return handleReconnectAgent(ctx, args)
 	case "s1_list_alerts":
 		return handleListAlerts(ctx, args)
+	case "s1_set_alert_verdict":
+		return handleSetAlertVerdict(ctx, args)
+	case "s1_set_alert_status":
+		return handleSetAlertStatus(ctx, args)
 	case "s1_hash_reputation":
 		return handleHashReputation(ctx, args)
 	case "s1_dv_query":
