@@ -185,3 +185,4 @@ func QueryAlerts(ctx context.Context, opts AlertQueryOpts) (*AlertsResult, error
 		PageInfo: resp.Data.Alerts.PageInfo,
 	}, nil
 }
+
