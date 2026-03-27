@@ -25,6 +25,8 @@ func AllTools() []ToolDef {
 		dvQueryTool,
 		dvGetEventsTool,
 		investigateThreatTool,
+		listExclusionsTool,
+		createExclusionTool,
 	}
 }
 
@@ -63,6 +65,10 @@ func DispatchTool(ctx context.Context, name string, args json.RawMessage) ToolRe
 		return handleDVGetEvents(ctx, args)
 	case "s1_investigate_threat":
 		return handleInvestigateThreat(ctx, args)
+	case "s1_list_exclusions":
+		return handleListExclusions(ctx, args)
+	case "s1_create_exclusion":
+		return handleCreateExclusion(ctx, args)
 	default:
 		return toolError(fmt.Sprintf("unknown tool: %s", name))
 	}

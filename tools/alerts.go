@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/c0tton-fluff/sentinelone-mcp-server/client"
@@ -104,6 +106,85 @@ func summarizeAlert(a map[string]any) string {
 
 	return fmt.Sprintf("- %s | %s | %s | %s\n  ID: %s | Verdict: %s\n  Classification: %s | Confidence: %s\n  Storyline: %s",
 		name, severity, status, timeStr, id, verdict, classification, confidence, storylineID) + assetLine + processLine
+}
+
+// alertSummaryHeader builds a grouped overview: counts by rule name with severity and affected users.
+func alertSummaryHeader(alerts []map[string]any) string {
+	// Count by status.
+	statusCounts := map[string]int{}
+	for _, a := range alerts {
+		statusCounts[fallback(getStr(a, "status"), "Unknown")]++
+	}
+	var statusParts []string
+	for _, s := range []string{"NEW", "IN_PROGRESS", "RESOLVED"} {
+		if c, ok := statusCounts[s]; ok {
+			statusParts = append(statusParts, fmt.Sprintf("%d %s", c, s))
+		}
+	}
+
+	// Group by rule name.
+	type ruleGroup struct {
+		severity string
+		count    int
+		users    map[string]struct{}
+	}
+	groups := map[string]*ruleGroup{}
+	var order []string
+	for _, a := range alerts {
+		name := fallback(getStr(a, "name"), "Unknown")
+		if _, exists := groups[name]; !exists {
+			groups[name] = &ruleGroup{
+				severity: fallback(getStr(a, "severity"), "?"),
+				users:    map[string]struct{}{},
+			}
+			order = append(order, name)
+		}
+		g := groups[name]
+		g.count++
+		if assets, ok := a["assets"].([]any); ok && len(assets) > 0 {
+			if asset, ok := assets[0].(map[string]any); ok {
+				if user := getStr(asset, "lastLoggedInUser"); user != "" {
+					g.users[user] = struct{}{}
+				}
+			}
+		}
+	}
+
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "%d alert(s) (%s):\n\nBy rule:\n", len(alerts), strings.Join(statusParts, ", "))
+	for _, name := range order {
+		g := groups[name]
+		users := slices.Sorted(maps.Keys(g.users))
+		fmt.Fprintf(&sb, "  %-50s %8s  %3d  [%s]\n", name, g.severity, g.count, strings.Join(users, ", "))
+	}
+	return sb.String()
+}
+
+// summarizeAlertCompact returns a one-liner suitable for large result sets.
+func summarizeAlertCompact(a map[string]any) string {
+	severity := fallback(getStr(a, "severity"), "?")
+	status := fallback(getStr(a, "status"), "?")
+	verdict := fallback(getStr(a, "analystVerdict"), "UNDEFINED")
+	name := fallback(getStr(a, "name"), "Unknown")
+	id := getStr(a, "id")
+
+	timeStr := "?"
+	if d := getStr(a, "detectedAt"); d != "" {
+		timeStr = formatTimeAgo(d)
+	}
+
+	var user string
+	if assets, ok := a["assets"].([]any); ok && len(assets) > 0 {
+		if asset, ok := assets[0].(map[string]any); ok {
+			user = getStr(asset, "lastLoggedInUser")
+			if user == "" {
+				user = getStr(asset, "name")
+			}
+		}
+	}
+
+	return fmt.Sprintf("- [%s] %s | %s | %s | %s | %s (%s)",
+		severity, name, user, verdict, status, timeStr, id)
 }
 
 var setAlertVerdictTool = ToolDef{
@@ -344,10 +425,19 @@ func handleListAlerts(ctx context.Context, args json.RawMessage) ToolResult {
 		return toolText("No alerts found matching criteria.")
 	}
 
-	lines := make([]string, len(allAlerts))
-	for i, a := range allAlerts {
-		lines[i] = summarizeAlert(a)
+	// Use detailed format for small result sets, compact for large ones.
+	if len(allAlerts) <= 10 {
+		lines := make([]string, len(allAlerts))
+		for i, a := range allAlerts {
+			lines[i] = summarizeAlert(a)
+		}
+		return toolText(fmt.Sprintf("Found %d alert(s):\n\n%s", len(allAlerts), strings.Join(lines, "\n\n")))
 	}
 
-	return toolText(fmt.Sprintf("Found %d alert(s):\n\n%s", len(allAlerts), strings.Join(lines, "\n\n")))
+	header := alertSummaryHeader(allAlerts)
+	lines := make([]string, len(allAlerts))
+	for i, a := range allAlerts {
+		lines[i] = summarizeAlertCompact(a)
+	}
+	return toolText(header + "\n" + strings.Join(lines, "\n"))
 }
