@@ -331,6 +331,26 @@ func CreateExclusion(ctx context.Context, data map[string]any, siteIDs []string)
 	return &resp, nil
 }
 
+// -- STAR Custom Detection Rules --
+
+func CreateSTARRule(ctx context.Context, data, filter map[string]any) (map[string]any, error) {
+	body := map[string]any{
+		"data":   data,
+		"filter": filter,
+	}
+	raw, err := doRequest(ctx, "POST", "/cloud-detection/rules", body)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+	return resp.Data, nil
+}
+
 // -- Hashes --
 
 func GetHashVerdict(ctx context.Context, hash string) (string, error) {

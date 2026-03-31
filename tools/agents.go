@@ -290,6 +290,7 @@ Active: %s
 ID: %s
 UUID: %s
 Domain: %s
+Account: %s (ID: %s)
 Site: %s (ID: %s)
 Group: %s
 ---
@@ -306,6 +307,8 @@ Agent Version: %s`,
 		getStr(a, "id"),
 		fallback(getStr(a, "uuid"), "N/A"),
 		fallback(getStr(a, "domain"), "N/A"),
+		fallback(getStr(a, "accountName"), "N/A"),
+		fallback(getStr(a, "accountId"), "N/A"),
 		fallback(getStr(a, "siteName"), "N/A"),
 		fallback(getStr(a, "siteId"), "N/A"),
 		fallback(getStr(a, "groupName"), "N/A"),
