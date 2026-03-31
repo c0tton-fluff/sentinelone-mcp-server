@@ -141,7 +141,7 @@ func handleListExclusions(ctx context.Context, args json.RawMessage) ToolResult 
 
 	result, err := client.ListExclusions(ctx, q)
 	if err != nil {
-		return toolError(fmt.Sprintf("Error: %v", err))
+		return toolError(fmt.Sprintf("Error listing exclusions: %v", err))
 	}
 
 	if len(result.Data) == 0 {

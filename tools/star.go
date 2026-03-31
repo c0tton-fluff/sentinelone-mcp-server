@@ -129,9 +129,12 @@ func handleCreateSTARRule(ctx context.Context, args json.RawMessage) ToolResult 
 		return toolError("scope is required: provide siteIds, accountIds, or set tenant to true")
 	}
 
-	// Defaults.
+	// Defaults and validation.
 	if p.ExpirationMode == "" {
 		p.ExpirationMode = "Permanent"
+	}
+	if p.ExpirationMode == "Temporary" && p.Expiration == "" {
+		return toolError("expiration is required when expirationMode is Temporary")
 	}
 	if p.Status == "" {
 		p.Status = "Active"
