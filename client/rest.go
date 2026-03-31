@@ -297,6 +297,60 @@ func SetAlertStatus(ctx context.Context, filter AlertFilter, status string) (int
 	return resp.Data.Affected, nil
 }
 
+// -- Exclusions --
+
+func ListExclusions(ctx context.Context, q url.Values) (*PaginatedResponse, error) {
+	endpoint := "/exclusions"
+	if qs := q.Encode(); qs != "" {
+		endpoint += "?" + qs
+	}
+	return doGet(ctx, endpoint)
+}
+
+type CreateExclusionResponse struct {
+	Data []map[string]any `json:"data"`
+}
+
+func CreateExclusion(ctx context.Context, data map[string]any, siteIDs []string) (*CreateExclusionResponse, error) {
+	filter := map[string]any{}
+	if len(siteIDs) > 0 {
+		filter["siteIds"] = siteIDs
+	}
+	body := map[string]any{
+		"data":   data,
+		"filter": filter,
+	}
+	raw, err := doRequest(ctx, "POST", "/exclusions", body)
+	if err != nil {
+		return nil, err
+	}
+	var resp CreateExclusionResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+	return &resp, nil
+}
+
+// -- STAR Custom Detection Rules --
+
+func CreateSTARRule(ctx context.Context, data, filter map[string]any) (map[string]any, error) {
+	body := map[string]any{
+		"data":   data,
+		"filter": filter,
+	}
+	raw, err := doRequest(ctx, "POST", "/cloud-detection/rules", body)
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Data map[string]any `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+	return resp.Data, nil
+}
+
 // -- Hashes --
 
 func GetHashVerdict(ctx context.Context, hash string) (string, error) {
