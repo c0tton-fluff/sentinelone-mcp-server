@@ -331,6 +331,27 @@ func CreateExclusion(ctx context.Context, data map[string]any, siteIDs []string)
 	return &resp, nil
 }
 
+func DeleteExclusion(ctx context.Context, ids []string) (int, error) {
+	body := map[string]any{
+		"data": map[string]any{
+			"ids": ids,
+		},
+	}
+	raw, err := doRequest(ctx, "DELETE", "/exclusions", body)
+	if err != nil {
+		return 0, err
+	}
+	var resp struct {
+		Data struct {
+			Affected int `json:"affected"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return 0, fmt.Errorf("parse response: %w", err)
+	}
+	return resp.Data.Affected, nil
+}
+
 // -- STAR Custom Detection Rules --
 
 func CreateSTARRule(ctx context.Context, data, filter map[string]any) (map[string]any, error) {

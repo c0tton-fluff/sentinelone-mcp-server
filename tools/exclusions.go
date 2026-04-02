@@ -86,6 +86,22 @@ var createExclusionTool = ToolDef{
 	},
 }
 
+var deleteExclusionTool = ToolDef{
+	Name:        "s1_delete_exclusion",
+	Description: "Delete one or more SentinelOne exclusions by ID",
+	InputSchema: map[string]any{
+		"type":     "object",
+		"required": []string{"ids"},
+		"properties": map[string]any{
+			"ids": map[string]any{
+				"type":        "array",
+				"description": "Exclusion IDs to delete",
+				"items":       map[string]any{"type": "string"},
+			},
+		},
+	},
+}
+
 func summarizeExclusion(e map[string]any) string {
 	id := getStr(e, "id")
 	exType := fallback(getStr(e, "type"), "unknown")
@@ -214,4 +230,25 @@ func handleCreateExclusion(ctx context.Context, args json.RawMessage) ToolResult
 		id = getStr(resp.Data[0], "id")
 	}
 	return toolText(fmt.Sprintf("Exclusion created successfully.\nID: %s\nType: %s\nValue: %s\nOS: %s", id, p.Type, p.Value, p.OSType))
+}
+
+func handleDeleteExclusion(ctx context.Context, args json.RawMessage) ToolResult {
+	var p struct {
+		IDs []string `json:"ids"`
+	}
+	if len(args) > 0 {
+		if err := json.Unmarshal(args, &p); err != nil {
+			return toolError(fmt.Sprintf("invalid arguments: %v", err))
+		}
+	}
+	if len(p.IDs) == 0 {
+		return toolError("ids is required (at least one exclusion ID)")
+	}
+
+	affected, err := client.DeleteExclusion(ctx, p.IDs)
+	if err != nil {
+		return toolError(fmt.Sprintf("Error deleting exclusion(s): %v", err))
+	}
+
+	return toolText(fmt.Sprintf("Deleted %d exclusion(s).", affected))
 }
