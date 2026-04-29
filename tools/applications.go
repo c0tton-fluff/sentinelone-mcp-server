@@ -45,7 +45,7 @@ func handleListApplications(ctx context.Context, args json.RawMessage) ToolResul
 		}
 	}
 	if p.Limit < 1 || p.Limit > 1000 {
-		p.Limit = 50
+		return toolError("limit must be between 1 and 1000")
 	}
 	if p.Name == "" && p.AgentName == "" {
 		return toolError("at least one of 'name' or 'agentName' is required")

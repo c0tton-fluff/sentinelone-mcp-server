@@ -151,8 +151,12 @@ func summarizeEvent(e map[string]any) string {
 		details += " | Cmd: " + cmd
 	}
 
-	// Image path for context.
-	if imgPath := firstNonEmpty(getStr(e, "tgtProcImagePath"), getStr(e, "srcProcImagePath"), getStr(e, "processImagePath")); imgPath != "" {
+	imgPath := firstNonEmpty(
+		getStr(e, "tgtProcImagePath"),
+		getStr(e, "srcProcImagePath"),
+		getStr(e, "processImagePath"),
+	)
+	if imgPath != "" {
 		details += " | Path: " + truncatePath(imgPath, 60)
 	}
 
