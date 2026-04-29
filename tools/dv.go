@@ -123,33 +123,65 @@ func summarizeEvent(e map[string]any) string {
 		timeStr = formatTimeAgo(d)
 	}
 	eventType := fallback(getStr(e, "eventType"), "Unknown")
-	process := fallback(getStr(e, "processName"), "N/A")
 	agent := fallback(getStr(e, "agentName"), "Unknown")
 
+	// Process name: prefer tgtProcName (target of the action), fall back to
+	// srcProcName, then the legacy processName field.
+	process := firstNonEmpty(
+		getStr(e, "tgtProcName"),
+		getStr(e, "srcProcName"),
+		getStr(e, "processName"),
+	)
+	if process == "" {
+		process = "N/A"
+	}
+
 	var details string
+
+	// Command line: prefer tgt, fall back to src, then legacy.
+	cmd := firstNonEmpty(
+		getStr(e, "tgtProcCmdLine"),
+		getStr(e, "srcProcCmdLine"),
+		getStr(e, "processCmd"),
+	)
+	if cmd != "" {
+		if len(cmd) > 120 {
+			cmd = cmd[:120] + "..."
+		}
+		details += " | Cmd: " + cmd
+	}
+
+	// Image path for context.
+	if imgPath := firstNonEmpty(getStr(e, "tgtProcImagePath"), getStr(e, "srcProcImagePath"), getStr(e, "processImagePath")); imgPath != "" {
+		details += " | Path: " + truncatePath(imgPath, 60)
+	}
+
+	// User info.
+	if user := firstNonEmpty(getStr(e, "srcProcUser"), getStr(e, "tgtProcUser"), getStr(e, "user")); user != "" {
+		details += " | User: " + user
+	}
+
+	// Network details.
 	srcIP := getStr(e, "srcIp")
 	dstIP := getStr(e, "dstIp")
 	dstPort := getStr(e, "dstPort")
-	if dstPort == "" {
-		dstPort = "?"
-	}
-
 	if srcIP != "" && dstIP != "" {
+		if dstPort == "" {
+			dstPort = "?"
+		}
 		details += fmt.Sprintf(" | %s -> %s:%s", srcIP, dstIP, dstPort)
 	} else if dstIP != "" {
+		if dstPort == "" {
+			dstPort = "?"
+		}
 		details += fmt.Sprintf(" -> %s:%s", dstIP, dstPort)
 	}
+
 	if fp := getStr(e, "fileFullName"); fp != "" {
-		details += " | " + truncatePath(fp, 60)
+		details += " | File: " + truncatePath(fp, 60)
 	}
 	if dns := getStr(e, "dnsRequest"); dns != "" {
 		details += " | DNS: " + dns
-	}
-	if user := getStr(e, "user"); user != "" {
-		details += " | User: " + user
-	}
-	if cmd := getStr(e, "processCmd"); cmd != "" {
-		details += " | Cmd: " + cmd
 	}
 
 	return fmt.Sprintf("- %s | %s | %s | %s%s", eventType, agent, process, timeStr, details)

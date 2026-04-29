@@ -29,6 +29,7 @@ func AllTools() []ToolDef {
 		createExclusionTool,
 		deleteExclusionTool,
 		createSTARRuleTool,
+		listApplicationsTool,
 	}
 }
 
@@ -75,6 +76,8 @@ func DispatchTool(ctx context.Context, name string, args json.RawMessage) ToolRe
 		return handleDeleteExclusion(ctx, args)
 	case "s1_create_star_rule":
 		return handleCreateSTARRule(ctx, args)
+	case "s1_list_applications":
+		return handleListApplications(ctx, args)
 	default:
 		return toolError(fmt.Sprintf("unknown tool: %s", name))
 	}

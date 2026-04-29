@@ -201,7 +201,7 @@ var setAlertVerdictTool = ToolDef{
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Free-text search across all alert fields (agent name, user, rule, etc.)",
+				"description": "Free-text search across all alert fields. Use this to match by username since there is no dedicated user filter.",
 			},
 			"ruleName": map[string]any{
 				"type":        "array",
@@ -210,7 +210,7 @@ var setAlertVerdictTool = ToolDef{
 			},
 			"agentName": map[string]any{
 				"type":        "array",
-				"description": "Filter by agent/endpoint name (partial match, multiple values)",
+				"description": "Filter by endpoint/computer name, NOT username (e.g. \"MacBook Pro\"). Partial match.",
 				"items":       map[string]any{"type": "string"},
 			},
 			"incidentStatus": map[string]any{
@@ -251,7 +251,7 @@ var setAlertStatusTool = ToolDef{
 			},
 			"query": map[string]any{
 				"type":        "string",
-				"description": "Free-text search across all alert fields (agent name, user, rule, etc.)",
+				"description": "Free-text search across all alert fields. Use this to match by username since there is no dedicated user filter.",
 			},
 			"ruleName": map[string]any{
 				"type":        "array",
@@ -260,7 +260,7 @@ var setAlertStatusTool = ToolDef{
 			},
 			"agentName": map[string]any{
 				"type":        "array",
-				"description": "Filter by agent/endpoint name (partial match, multiple values)",
+				"description": "Filter by endpoint/computer name, NOT username (e.g. \"MacBook Pro\"). Partial match.",
 				"items":       map[string]any{"type": "string"},
 			},
 			"incidentStatus": map[string]any{
