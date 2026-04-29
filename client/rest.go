@@ -445,3 +445,13 @@ func GetDVEvents(ctx context.Context, queryID string, limit int, cursor string) 
 	}
 	return doGet(ctx, "/dv/events?"+q.Encode())
 }
+
+// -- Installed Applications --
+
+func ListInstalledApplications(ctx context.Context, q url.Values) (*PaginatedResponse, error) {
+	endpoint := "/installed-applications"
+	if qs := q.Encode(); qs != "" {
+		endpoint += "?" + qs
+	}
+	return doGet(ctx, endpoint)
+}
