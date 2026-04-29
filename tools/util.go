@@ -75,6 +75,16 @@ func fallback(s, def string) string {
 	return s
 }
 
+// firstNonEmpty returns the first non-empty string from the arguments.
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // MCP tool types.
 
 // ToolDef describes an MCP tool for the tools/list response.
